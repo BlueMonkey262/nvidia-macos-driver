@@ -1,2 +1,13 @@
 __pycache__/
 *.pyc
+
+# Local-only material: audit notes, logs, VM details, built or patched binaries. Never commit these.
+.scratch/
+*.dylib
+*.log
+*.tar.gz
+*.dmg
+*.zip
+.env
+*.pem
+id_*
