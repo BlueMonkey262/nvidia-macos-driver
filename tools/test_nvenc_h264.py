@@ -62,15 +62,24 @@ with tempfile.TemporaryDirectory() as d:
         sys.exit(1)
     env = dict(os.environ, NVMTL_NO_NVDEC="1")   # the same software decoder checks every run
 
-    def run(argv):
-        p = subprocess.run([exe] + argv, capture_output=True, text=True, env=env, timeout=300)
+    def run(argv, **extra_env):
+        p = subprocess.run([exe] + argv, capture_output=True, text=True, env=dict(env, **extra_env), timeout=300)
         out = "\n".join(l for l in p.stdout.splitlines() if not l.startswith("nvrm:"))
-        say("--- nvenc_psnr " + " ".join(argv) + f" -> exit {p.returncode}\n" + out)
+        say("--- nvenc_psnr " + " ".join(argv) + (" [" + " ".join(extra_env) + "]" if extra_env else "") + f" -> exit {p.returncode}\n" + out)
         return p.returncode, out
 
     for w, h in SIZES:
         rc, out = run([str(w), str(h), str(FRAMES)])
         arm(f"{w}x{h}: hardware H.264 encode, {FRAMES} frames, PSNR above threshold", rc == 0, f"exit {rc}")
+
+    # what ffmpeg/Sunshine ask for in low-delay mode; VideoToolbox refuses it with -12902 unless the plugin drops it
+    rc, out = run(["1920", "1080", str(FRAMES)], NVENC_PSNR_LOW_LATENCY="1")
+    arm("1920x1080: session with EnableLowLatencyRateControl opens and encodes", rc == 0, f"exit {rc}")
+
+    # ffmpeg looks up the encoder's supported properties while its session is open; VideoToolbox answers -12908 for that
+    # unless the plugin serves it from a cache (the library allows one engine per process)
+    rc, out = run(["--props-open", "1920", "1080"])
+    arm("supported-property lookup works while a session is open (ffmpeg/Sunshine)", rc == 0, f"exit {rc}")
 
     rc, out = run(["--overlap", "1920", "1080"])
     ok = rc == 0

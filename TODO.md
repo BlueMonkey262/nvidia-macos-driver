@@ -11,6 +11,7 @@ When you finish or learn something, edit this file in the same change.
 
 | Issue | What is known | Label |
 |---|---|---|
+| Sunshine falls back to software x264 | Sunshine's low-delay flag adds `EnableLowLatencyRateControl`, which VideoToolbox refuses with -12902 on non-Apple GPUs. The plugin removes the key and serves the property lookup from a cache; with it Sunshine's startup probe picks `h264_videotoolbox` and the regression test passes. | VM-tested on Turing |
 | Second H.264 encode session is refused | Opening a second hardware session while the first is open fails with -12908 (`libnvenc_h264` logs "engine already in use in this process"). Sunshine does this and falls back to software x264. Upstream #206 reports the same on an RTX 2070 Super. | VM-tested on Turing |
 | Bitrate is ignored | The encoder runs at constant QP 23, so `AverageBitRate` has no effect (about 12 Mbit/s at 1080p, 20 Mbit/s at 1440p on the synthetic test clip). | VM-tested on Turing |
 | HEVC encode is off | Upstream reports a bitstream problem separate from the tiling one. | not tested here |
@@ -29,24 +30,28 @@ Roughly in order of value per effort. "Hardware" means it needs a real card and 
    a plugin-side workaround (release the first session when a second is requested), another binary patch, or accept it
    (the 2060 Super has one NVENC engine). Done when `tools/test_nvenc_h264.py --overlap-required` passes, or
    `docs/H264.md` says why it cannot. Needs: hardware, a human to run Sunshine. Risk: low (user space).
-2. **Honour `AverageBitRate`.** Find where the encoder sets its QP and whether rate control can be driven from
+2. **Make the encoder cheaper on CPU.** At 1080p one frame costs 3.6 ms of CPU, equal to its wall time, so one core is the
+   limit (277 fps at 1080p, about 70 fps projected at 4K, not measured). Suspect the CPU writing the tiled frame through
+   the small BAR1 mapping; a GPU copy would remove it. Done when `tools/bench_nvenc_h264.py` shows CPU ms/frame well
+   below wall ms/frame. Needs: hardware.
+3. **Honour `AverageBitRate`.** Find where the encoder sets its QP and whether rate control can be driven from
    VideoToolbox properties. Done when the bitrate follows the requested value within about 20% on the test clip.
    Needs: hardware. Risk: medium (more binary patching).
-3. **Sync with upstream.** Merge `upstream/main` (2.3.x), re-check that the encoder library is unchanged, re-run the
+4. **Sync with upstream.** Merge `upstream/main` (2.3.x), re-check that the encoder library is unchanged, re-run the
    H.264 test. Deploying anything under `kexts/` needs a human to boot it. Needs: hardware. Risk: medium.
-4. **A repeatable H.264 benchmark and a Linux comparison.** `tools/bench_nvenc_h264.py` measures this side; the
+5. **A repeatable H.264 benchmark and a Linux comparison.** `tools/bench_nvenc_h264.py` measures this side; the
    comparison needs the same card under Linux (ffmpeg `h264_nvenc`). Done when both numbers are in `docs/H264.md`.
-5. **Native encoder (research, architectural: ask first).** Today's encoder is upstream's closed binary with a patch.
+6. **Native encoder (research, architectural: ask first).** Today's encoder is upstream's closed binary with a patch.
    A native one means driving the NVENC engine (class 0xC4B7) ourselves; the engine's method interface is not
    documented, so this is reverse engineering. Done when a design note exists with what is known and what is not.
    Needs: hardware, a lot of time.
-6. **Ampere/Ada encode.** Upstream issue #65 measured the classic layout at 42-49 dB on an RTX 3070 Laptop with a
+7. **Ampere/Ada encode.** Upstream issue #65 measured the classic layout at 42-49 dB on an RTX 3070 Laptop with a
    similar change. The gate is Turing-only. Needs: a tester with the card.
-7. **HEVC encode.** Find the second bitstream problem. Needs: hardware.
-8. **OpenGL bind cost.** On Minecraft the render thread is CPU-bound at about 50k binds/s (about 20 us each) while the
+8. **HEVC encode.** Find the second bitstream problem. Needs: hardware.
+9. **OpenGL bind cost.** On Minecraft the render thread is CPU-bound at about 50k binds/s (about 20 us each) while the
    GPU idles; about 75% of descriptor sets are rebuilt, mostly on buffer-offset-only changes. First turn the ad-hoc
    counters into an env-gated, release-stripped feature plus a script, then try dynamic offsets. Needs: hardware.
-9. **Small-BAR (256 MB) characterization.** Script a load that fills BAR1 and record the counters (#169). Read-only.
-10. **CI.** The 47 `tools/test_*.py` tests mostly need macOS and are not run by anything. A macOS runner that runs the
+10. **Small-BAR (256 MB) characterization.** Script a load that fills BAR1 and record the counters (#169). Read-only.
+11. **CI.** The 47 `tools/test_*.py` tests mostly need macOS and are not run by anything. A macOS runner that runs the
     ones that need no GPU would catch regressions. Adding CI is a dependency decision: ask first.
-11. **Pascal research note.** Whether the kernel side can work without GSP firmware. Research only, no code.
+12. **Pascal research note.** Whether the kernel side can work without GSP firmware. Research only, no code.

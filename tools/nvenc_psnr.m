@@ -1,13 +1,16 @@
 // nvenc_psnr: encode synthetic NV12 frames with VideoToolbox H.264 (hardware required), decode them again with Apple's
 // software decoder and compare with the source. A correct picture is ~42 dB or more; a wrongly tiled one is 17-28 dB.
 // usage: nvenc_psnr [width height frames [min_psnr_db]]       default 1280 720 30 40
+//        nvenc_psnr --props-open [width height]               open a session, then look up the encoder's supported properties
+//                                                             with it still open (what ffmpeg does)
 //        nvenc_psnr --overlap [width height]                  open a second session before closing the first (what
 //                                                             Sunshine does); each session must emit frames
 // exit: 0 pass, 2 no hardware session, 3 nothing encoded, 4 no decoder, 5 PSNR below the threshold or frames lost,
-//       6 session is not hardware, 7 an overlapping session emitted nothing
+//       6 session is not hardware, 7 an overlapping session emitted nothing, 8 the property lookup failed
 // build: clang -fobjc-arc -O1 -o nvenc_psnr nvenc_psnr.m -framework Foundation -framework VideoToolbox \
 //          -framework CoreMedia -framework CoreVideo -framework Metal
-// Set NVMTL_NO_NVDEC=1 so the same software decoder checks every run.
+// Set NVMTL_NO_NVDEC=1 so the same software decoder checks every run. NVENC_PSNR_LOW_LATENCY=1 adds
+// EnableLowLatencyRateControl to the encoder specification, as ffmpeg/Sunshine do.
 #import <Foundation/Foundation.h>
 #import <VideoToolbox/VideoToolbox.h>
 #import <Metal/Metal.h>
@@ -55,7 +58,9 @@ static void enc_cb(void *refcon, void *src, OSStatus status, VTEncodeInfoFlags f
 
 static VTCompressionSessionRef open_session(int w, int h, enc_ctx *c, OSStatus *st)
 {
-    NSDictionary *spec = @{ (id)kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: @YES };
+    NSMutableDictionary *spec = [@{ (id)kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: @YES } mutableCopy];
+    // ffmpeg's h264_videotoolbox (so Sunshine) adds this key in low-delay mode; set NVENC_PSNR_LOW_LATENCY=1 to do the same
+    if (getenv("NVENC_PSNR_LOW_LATENCY")) spec[(id)kVTVideoEncoderSpecification_EnableLowLatencyRateControl] = @YES;
     VTCompressionSessionRef cs = NULL;
     *st = VTCompressionSessionCreate(NULL, w, h, kCMVideoCodecType_H264, (__bridge CFDictionaryRef)spec, NULL, NULL, enc_cb, c, &cs);
     if (!cs) return NULL;
@@ -103,18 +108,36 @@ static int run_overlap(int w, int h)
     return (a.samples.count == N && b.samples.count == N && !a.errors && !b.errors && !ee) ? 0 : 7;
 }
 
+static int run_props_open(int w, int h)
+{
+    enc_ctx a = { [NSMutableArray array], 0 };
+    OSStatus sa;
+    VTCompressionSessionRef A = open_session(w, h, &a, &sa);
+    printf("props-open: session create %d, hardware %s\n", (int)sa, A && session_is_hardware(A) ? "yes" : "no");
+    // what ffmpeg does next, with no encoder-ID output and the session still open
+    NSDictionary *spec = @{ (id)kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: @YES };
+    CFDictionaryRef props = NULL;
+    OSStatus sp = VTCopySupportedPropertyDictionaryForEncoder(w, h, kCMVideoCodecType_H264, (__bridge CFDictionaryRef)spec, NULL, &props);
+    printf("props-open: VTCopySupportedPropertyDictionaryForEncoder with a session open -> %d (%ld keys)\n", (int)sp, props ? (long)CFDictionaryGetCount(props) : -1L);
+    if (props) CFRelease(props);
+    if (A) VTCompressionSessionInvalidate(A);
+    return (A && sp == 0 && props) ? 0 : 8;
+}
+
 int main(int argc, char **argv)
 {
     @autoreleasepool {
         bool overlap = argc > 1 && !strcmp(argv[1], "--overlap");
-        int ai = overlap ? 2 : 1;
+        bool propsopen = argc > 1 && !strcmp(argv[1], "--props-open");
+        int ai = (overlap || propsopen) ? 2 : 1;
         int w = argc > ai ? atoi(argv[ai]) : 1280, h = argc > ai + 1 ? atoi(argv[ai + 1]) : 720;
-        int n = !overlap && argc > 3 ? atoi(argv[3]) : 30;
-        double min_db = !overlap && argc > 4 ? atof(argv[4]) : 40.0;
+        int n = !overlap && !propsopen && argc > 3 ? atoi(argv[3]) : 30;
+        double min_db = !overlap && !propsopen && argc > 4 ? atof(argv[4]) : 40.0;
         id<MTLDevice> dev = MTLCreateSystemDefaultDevice();     // brings the driver plugin up, which registers NVENC here
         printf("Metal device: %s\n", dev ? dev.name.UTF8String : "(none)");
         usleep(300000);
         if (overlap) return run_overlap(w, h);
+        if (propsopen) return run_props_open(w, h);
 
         NSMutableArray *src = [NSMutableArray array];
         for (int i = 0; i < n; i++) [src addObject:(__bridge_transfer id)make_frame(w, h, i)];
