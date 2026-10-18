@@ -187,8 +187,9 @@ static bool nvmtl_accel_armed(void)
 // rows and a green stripe, and both encoders produced torn pictures. The decoder's only difference is its untiling mode
 // (1 = Blackwell, 0 = classic), so earlier GPUs load libnvdec_h264_t2d.dylib, the same library with mode 0 (51 dB on
 // GA104). The H.264 encoder is registered on Turing only, from libnvenc_h264_t2d.dylib (tools/make_nvenc_t2d.py: the
-// Blackwell encoder with its tiling loops replaced; see docs/H264.md). Other earlier GPUs and HEVC are not registered,
-// so apps use Apple's encoder until they are fixed and tested there.
+// Blackwell encoder with its tiling loops replaced; see docs/H264.md). HEVC encode on Turing is opt-in
+// (NVMTL_NVENC_HEVC=1) from libnvenc_hevc_t2d.dylib (tools/make_nvenc_hevc_t2d.py); it is experimental and has not
+// been run on a GPU (docs/HEVC.md). Other earlier GPUs are not registered, so apps use Apple's encoder.
 // Set from the I/O registry where no Metal device (and so no Vulkan device name) exists: -1 = unknown, use the name.
 static int g_video_blackwell = -1;
 // One string from the per-generation profile NVRM publishes on the GPU's PCI device ("nvrm-gpu-profile": chip,
@@ -228,6 +229,17 @@ static bool nvmtl_nvenc_h264_allowed(void)
     if (nvmtl_video_is_blackwell()) return true;
     char gen[32];
     return nvmtl_gpu_profile_string(CFSTR("generation"), gen, sizeof gen) && !strcmp(gen, "Turing");   // not "Turing GTX 16" (TU116/TU117 have the older NVENC)
+}
+// HEVC encode on Turing is opt-in. Blackwell does not look at the variable: it keeps today's registration of
+// libnvenc_hevc.dylib. The variable is the first-landing guard so Sunshine and screen sharing do not pick the
+// encoder up before a PSNR run. Not tested on a GPU.
+static bool nvmtl_nvenc_hevc_allowed(void)
+{
+    if (nvmtl_video_is_blackwell()) return true;
+    const char *opt = getenv("NVMTL_NVENC_HEVC");
+    if (!opt || strcmp(opt, "1")) return false;
+    char gen[32];
+    return nvmtl_gpu_profile_string(CFSTR("generation"), gen, sizeof gen) && !strncmp(gen, "Turing", 6);
 }
 #include "nvmtl_vt_spec_hook.h"
 static void nvmtl_nvdec_register(void)
@@ -356,7 +368,7 @@ static void nvmtl_nvenc_hevc_register(void)
     dispatch_once(&once, ^{
         const char *me = getprogname();
         if (getenv("NVMTL_NO_NVENC_HEVC")) { nvlog("nvenc: NVMTL_NO_NVENC_HEVC set - not registering HEVC in %s", me); return; }
-        if (!nvmtl_video_is_blackwell()) { nvlog("nvenc: %s is not Blackwell - HEVC encode stays on Apple's encoder", nvmtl_vk_device_name()); return; }
+        if (!nvmtl_nvenc_hevc_allowed()) { nvlog("nvenc: %s is not Blackwell - HEVC encode stays on Apple's encoder", nvmtl_vk_device_name()); return; }
         if (!strcmp(me, "WindowServer")) return;
         typedef int32_t (*RegFn)(uint32_t, CFDictionaryRef, void *);
         RegFn reg = (RegFn)dlsym(RTLD_DEFAULT, "VTRegisterVideoEncoderWithInfo");
@@ -365,7 +377,7 @@ static void nvmtl_nvenc_hevc_register(void)
         if (!dladdr((const void *)nvmtl_nvenc_hevc_register, &di) || !di.dli_fname) { nvlog("nvenc: dladdr failed - not registering HEVC"); return; }
         char dir[1024], path[1200];
         strlcpy(dir, di.dli_fname, sizeof dir);
-        snprintf(path, sizeof path, "%s/libnvenc_hevc.dylib", dirname(dir));
+        snprintf(path, sizeof path, "%s/%s", dirname(dir), nvmtl_video_is_blackwell() ? "libnvenc_hevc.dylib" : "libnvenc_hevc_t2d.dylib");
         void *h = dlopen(path, RTLD_NOW | RTLD_LOCAL);
         if (!h) { nvlog("nvenc: dlopen %s FAILED: %s", path, dlerror()); return; }
         void *fac = dlsym(h, "NVEncHEVC_CreateInstance");
@@ -376,6 +388,7 @@ static void nvmtl_nvenc_hevc_register(void)
         int32_t st = reg('hvc1', (__bridge CFDictionaryRef)info, fac);
         nvlog("nvenc: HEVC encoder %s in %s (VTRegisterVideoEncoderWithInfo -> %d, rating 1000, %s)",
               st ? "NOT registered" : "REGISTERED", me, (int)st, path);
+        if (!st) nvmtl_vt_spec_hook_install();
     });
 }
 // ANGLE refuses Metal on NVIDIA (disableMetalOnNvidia), and Chromium on macOS has no other GL backend, so without this
