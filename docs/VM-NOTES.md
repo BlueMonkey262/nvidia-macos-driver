@@ -40,3 +40,10 @@ the overridden option. *VM-tested on Turing.*
 
 - Whether the host is a bottleneck (vCPU contention, other VMs). Measuring it needs the Proxmox side (`/proc/pressure/cpu`,
   `top -H` on the VM's process).
+
+## Measuring the guest
+
+The macOS programs for measuring a guest (present cadence, screen-capture rate and latency, OpenGL pacing, tearing, encoder
+quality, bitrate on the wire) are in [tools/vmbench/](../tools/vmbench/README.md), with what each one measures, the
+pitfalls (Screen Recording, the release plugin's environment, a busy guest) and baseline numbers. `build_all.sh` compiles
+them on the guest and installs nothing.
