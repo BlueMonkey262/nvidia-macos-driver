@@ -28,6 +28,7 @@ static CFDictionaryRef nvmtl_vt_spec_without_lowlatency(uint32_t codec, CFDictio
     if (!spec) return NULL;
     if (codec != 'avc1' || !CFDictionaryContainsKey(spec, CFSTR("EnableLowLatencyRateControl"))) return CFRetain(spec);
     CFMutableDictionaryRef m = CFDictionaryCreateMutableCopy(NULL, 0, spec);
+    if (!m) return CFRetain(spec);   // out of memory: pass the original on rather than crash
     CFDictionaryRemoveValue(m, CFSTR("EnableLowLatencyRateControl"));
     nvlog("nvenc: dropped EnableLowLatencyRateControl from an H.264 specification in %s", getprogname());
     return m;
@@ -111,18 +112,28 @@ static int32_t nvmtl_vt_props_hook(int32_t w, int32_t h, uint32_t codec, CFDicti
     return r;
 }
 
+#ifndef MH_DYLIB_IN_CACHE
+#define MH_DYLIB_IN_CACHE 0x80000000u
+#endif
 static void nvmtl_vt_rebind_image(const struct mach_header *mh, intptr_t slide)
 {
     if (!mh || mh->magic != MH_MAGIC_64) return;
     const struct mach_header_64 *hdr = (const struct mach_header_64 *)mh;
+    // Images of the dyld shared cache (system frameworks) are left alone: their pointer pages are not ours to write, and
+    // the calls that matter (ffmpeg, Sunshine, apps) come from images outside the cache.
+    if (hdr->flags & MH_DYLIB_IN_CACHE) return;
     const struct symtab_command *st = NULL;
     const struct dysymtab_command *dst = NULL;
     const struct segment_command_64 *linkedit = NULL;
-    const struct load_command *lc = (const struct load_command *)(hdr + 1);
+    // The load commands lie in [cmds, cmds_end). A command smaller than its own header, or one that runs past the end,
+    // ends the walk: an image that dyld accepted should never have either, but this runs in every process.
+    const char *cmds = (const char *)(hdr + 1), *cmds_end = cmds + hdr->sizeofcmds;
+    const struct load_command *lc = (const struct load_command *)cmds;
     for (uint32_t i = 0; i < hdr->ncmds; i++, lc = (const struct load_command *)((const char *)lc + lc->cmdsize)) {
+        if ((const char *)lc + sizeof *lc > cmds_end || lc->cmdsize < sizeof *lc || (const char *)lc + lc->cmdsize > cmds_end) break;
         if (lc->cmd == LC_SYMTAB) st = (const struct symtab_command *)lc;
         else if (lc->cmd == LC_DYSYMTAB) dst = (const struct dysymtab_command *)lc;
-        else if (lc->cmd == LC_SEGMENT_64 && !strcmp(((const struct segment_command_64 *)lc)->segname, SEG_LINKEDIT))
+        else if (lc->cmd == LC_SEGMENT_64 && !strncmp(((const struct segment_command_64 *)lc)->segname, SEG_LINKEDIT, 16))
             linkedit = (const struct segment_command_64 *)lc;
     }
     if (!st || !dst || !linkedit || !dst->nindirectsyms) return;
@@ -130,11 +141,15 @@ static void nvmtl_vt_rebind_image(const struct mach_header *mh, intptr_t slide)
     const struct nlist_64 *syms = (const struct nlist_64 *)(base + st->symoff);
     const char *strs = (const char *)(base + st->stroff);
     const uint32_t *indirect = (const uint32_t *)(base + dst->indirectsymoff);
-    lc = (const struct load_command *)(hdr + 1);
+    lc = (const struct load_command *)cmds;
     for (uint32_t i = 0; i < hdr->ncmds; i++, lc = (const struct load_command *)((const char *)lc + lc->cmdsize)) {
+        if ((const char *)lc + sizeof *lc > cmds_end || lc->cmdsize < sizeof *lc || (const char *)lc + lc->cmdsize > cmds_end) break;
         if (lc->cmd != LC_SEGMENT_64) continue;
         const struct segment_command_64 *seg = (const struct segment_command_64 *)lc;
-        if (strcmp(seg->segname, SEG_DATA) && strcmp(seg->segname, "__DATA_CONST") && strcmp(seg->segname, "__AUTH_CONST")) continue;
+        // the sections must fit inside the command
+        if (lc->cmdsize < sizeof *seg || (lc->cmdsize - sizeof *seg) / sizeof(struct section_64) < seg->nsects) continue;
+        const bool is_const = !strncmp(seg->segname, "__DATA_CONST", 16);
+        if (strncmp(seg->segname, SEG_DATA, 16) && !is_const) continue;   // __AUTH_CONST holds signed pointers: not touched
         const struct section_64 *sec = (const struct section_64 *)(seg + 1);
         for (uint32_t s = 0; s < seg->nsects; s++, sec++) {
             uint32_t type = sec->flags & SECTION_TYPE;
@@ -142,15 +157,20 @@ static void nvmtl_vt_rebind_image(const struct mach_header *mh, intptr_t slide)
             void **slots = (void **)((uintptr_t)slide + sec->addr);
             const uint32_t *idx = indirect + sec->reserved1;
             for (uint64_t k = 0; k < sec->size / sizeof(void *); k++) {
-                if (idx[k] == INDIRECT_SYMBOL_ABS || idx[k] == INDIRECT_SYMBOL_LOCAL || idx[k] >= st->nsyms) continue;
+                if ((uint64_t)sec->reserved1 + k >= dst->nindirectsyms) break;   // a malformed table ends the section
+                if (idx[k] == INDIRECT_SYMBOL_ABS || idx[k] == INDIRECT_SYMBOL_LOCAL || (idx[k] & INDIRECT_SYMBOL_ABS) || idx[k] >= st->nsyms) continue;
+                if (syms[idx[k]].n_un.n_strx >= st->strsize) continue;
                 const char *name = strs + syms[idx[k]].n_un.n_strx;
                 void *repl = NULL, *orig = NULL;
                 if (!strcmp(name, "_VTCompressionSessionCreate")) { repl = (void *)nvmtl_vt_create_hook; orig = (void *)g_vt_create_orig; }
                 else if (!strcmp(name, "_VTCopySupportedPropertyDictionaryForEncoder")) { repl = (void *)nvmtl_vt_props_hook; orig = (void *)g_vt_props_orig; }
-                if (!repl || slots[k] == repl || slots[k] != orig) continue;
+                if (!repl || slots[k] == repl) continue;
+                if (slots[k] != orig) continue;   // someone else's pointer (another hook): not ours to replace
                 vm_address_t page = (vm_address_t)&slots[k] & ~(vm_address_t)(vm_page_size - 1);
-                vm_protect(mach_task_self(), page, vm_page_size, false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+                // a page that cannot be made writable (hardened runtime, shared cache) is skipped: writing anyway would fault
+                if (vm_protect(mach_task_self(), page, vm_page_size, false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY) != KERN_SUCCESS) continue;
                 slots[k] = repl;
+                if (is_const) vm_protect(mach_task_self(), page, vm_page_size, false, VM_PROT_READ);   // __DATA_CONST goes back to read-only
             }
         }
     }
