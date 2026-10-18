@@ -13,9 +13,18 @@ bytes per step, so the width of a row must be a multiple of 16 (the unpatched ch
 
 Verified by emulation only (17 sample rows, 1920 wide, pitch 2048: old loops equal the library's own bw8/bw16, new
 loops equal its sw_t2d); see docs/H264.md for what has been run on a card.
+
+Second change, on by default (--keep-multi-ref turns it off): single-reference P-frames. The library codes each P-frame
+with min(frames since the last IDR, 3) reference frames and builds the engine's reference list from that count in two
+places in nve264_encode (0x689a: the setup struct, 0x6c7b: the method stream that points the engine at each reference
+picture), plus a flag set from "frames since IDR < 3" (0x69c0). Moonlight rewrites every SPS to one reference frame and
+decodes with AV_EF_EXPLODE, so a P-frame with two or three references fails with "Missing reference picture" and the
+client requests an IDR in a loop. The count is clamped to 1 in both places and the flag forced to 1, which is exactly
+what the library does for the first P-frame after an IDR; the engine writes the slice headers itself from the same setup
+(num_ref_idx_active_override with one reference), so the headers follow.
 Refuses any other input library, so a rebuilt encoder cannot be patched blindly. Sign the output ad hoc after.
 
-usage: make_nvenc_t2d.py <libnvenc_h264.dylib> <out libnvenc_h264_t2d.dylib>
+usage: make_nvenc_t2d.py [--keep-multi-ref] <libnvenc_h264.dylib> <out libnvenc_h264_t2d.dylib>
 """
 import hashlib
 import struct
@@ -38,7 +47,17 @@ CHROMA_CAVE = bytes.fromhex(
     "3a4883c6104839de7cc1e9a5c5ffff")
 
 
-def main(src, dst):
+# (address, expected bytes, replacement bytes), all inside nve264_encode
+SINGLE_REF = [
+    (0x689A, "4183fd03", "4183fd01"),                    # cmp r13d,3 -> 1          (setup struct: min(frames since IDR, 3))
+    (0x689E, "ba03000000", "ba01000000"),                # mov edx,3 -> 1
+    (0x69BE, "31c04183fd030f9cc0", "b801000000" + "90" * 4),   # xor eax,eax; cmp r13d,3; setl al -> mov eax,1; nops
+    (0x6C7B, "4183fd03", "4183fd01"),                    # cmp r13d,3 -> 1          (method stream: reference pictures)
+    (0x6C7F, "ba03000000", "ba01000000"),                # mov edx,3 -> 1
+]
+
+
+def main(src, dst, single_ref=True):
     data = bytearray(open(src, "rb").read())
     if not hashlib.sha256(data).hexdigest().startswith(KNOWN):
         raise SystemExit(f"{src} is not the known encoder ({KNOWN}...): read the loops again before patching")
@@ -51,12 +70,19 @@ def main(src, dst):
         data[cave:cave + len(code)] = code
     for hook, cave in ((LUMA, CAVE_L), (CHROMA, CAVE_C)):
         data[hook:hook + 5] = b"\xe9" + struct.pack("<i", cave - (hook + 5))
+    if single_ref:
+        for addr, old, new in SINGLE_REF:
+            if data[addr:addr + len(old) // 2] != bytes.fromhex(old):
+                raise SystemExit(f"unexpected bytes at {addr:#x}: {data[addr:addr + len(old) // 2].hex()} (wanted {old})")
+            data[addr:addr + len(new) // 2] = bytes.fromhex(new)
     with open(dst, "wb") as f:
         f.write(data)
-    print(f"wrote {dst}: luma and chroma tiling loops now write the t2d / block height 2 layout")
+    print(f"wrote {dst}: luma and chroma tiling loops now write the t2d / block height 2 layout"
+          + ("; P-frames use one reference frame" if single_ref else "; P-frames keep up to three references"))
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    args = [a for a in sys.argv[1:] if a != "--keep-multi-ref"]
+    if len(args) != 2:
         raise SystemExit(__doc__)
-    main(sys.argv[1], sys.argv[2])
+    main(args[0], args[1], single_ref="--keep-multi-ref" not in sys.argv)

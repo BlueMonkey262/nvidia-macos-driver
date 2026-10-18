@@ -10,7 +10,8 @@
 // build: clang -fobjc-arc -O1 -o nvenc_psnr nvenc_psnr.m -framework Foundation -framework VideoToolbox \
 //          -framework CoreMedia -framework CoreVideo -framework Metal
 // Set NVMTL_NO_NVDEC=1 so the same software decoder checks every run. NVENC_PSNR_LOW_LATENCY=1 adds
-// EnableLowLatencyRateControl to the encoder specification, as ffmpeg/Sunshine do.
+// EnableLowLatencyRateControl to the encoder specification, as ffmpeg/Sunshine do. NVENC_PSNR_DUMP=file also writes the
+// encoded stream as Annex B (SPS/PPS before every key frame) so tools/h264_refs.py can check its slice headers.
 #import <Foundation/Foundation.h>
 #import <VideoToolbox/VideoToolbox.h>
 #import <Metal/Metal.h>
@@ -78,6 +79,42 @@ static bool session_is_hardware(VTCompressionSessionRef cs)
     bool yes = hw && CFBooleanGetValue(hw);
     if (hw) CFRelease(hw);
     return yes;
+}
+
+static void write_annexb(const char *path, NSArray *samples)
+{
+    FILE *out = fopen(path, "wb");
+    if (!out) { printf("cannot write %s\n", path); exit(9); }   // a missing dump must not look like a pass
+    static const uint8_t sc[3] = {0, 0, 1};
+    for (id s in samples) {
+        CMSampleBufferRef sb = (__bridge CMSampleBufferRef)s;
+        CMFormatDescriptionRef fd = CMSampleBufferGetFormatDescription(sb);
+        CFArrayRef att = CMSampleBufferGetSampleAttachmentsArray(sb, false);
+        CFDictionaryRef a0 = att && CFArrayGetCount(att) ? CFArrayGetValueAtIndex(att, 0) : NULL;
+        bool key = !(a0 && CFDictionaryContainsKey(a0, kCMSampleAttachmentKey_NotSync) &&
+                     CFBooleanGetValue(CFDictionaryGetValue(a0, kCMSampleAttachmentKey_NotSync)));
+        size_t count = 0; int nal_len = 4; const uint8_t *ps; size_t psn;
+        CMVideoFormatDescriptionGetH264ParameterSetAtIndex(fd, 0, &ps, &psn, &count, &nal_len);
+        for (size_t i = 0; key && i < count; i++) {
+            CMVideoFormatDescriptionGetH264ParameterSetAtIndex(fd, i, &ps, &psn, NULL, NULL);
+            fwrite(sc, 1, 3, out); fwrite(ps, 1, psn, out);
+        }
+        CMBlockBufferRef bb = CMSampleBufferGetDataBuffer(sb);
+        if (!bb) continue;
+        size_t len = CMBlockBufferGetDataLength(bb), pos = 0;
+        uint8_t *d = malloc(len ? len : 1);
+        if (!d || CMBlockBufferCopyDataBytes(bb, 0, len, d)) { free(d); continue; }
+        while (pos + nal_len <= len) {
+            uint32_t n = 0;
+            for (int k = 0; k < nal_len; k++) n = (n << 8) | d[pos + k];
+            pos += nal_len;
+            if (n == 0 || pos + n > len) break;
+            fwrite(sc, 1, 3, out); fwrite(d + pos, 1, n, out); pos += n;
+        }
+        free(d);
+    }
+    fclose(out);
+    printf("wrote Annex B stream to %s\n", path);
 }
 
 static void encode_n(VTCompressionSessionRef cs, NSArray *src, int n, int *encode_errors)
@@ -161,6 +198,7 @@ int main(int argc, char **argv)
         size_t bytes = 0;
         for (id s in c.samples) bytes += CMSampleBufferGetTotalSampleSize((__bridge CMSampleBufferRef)s);
         printf("bitrate: %.2f Mbit/s at 30 fps\n", bytes * 8.0 / ((double)c.samples.count / 30.0) / 1e6);
+        if (getenv("NVENC_PSNR_DUMP")) write_annexb(getenv("NVENC_PSNR_DUMP"), c.samples);
 
         CMFormatDescriptionRef fd = CMSampleBufferGetFormatDescription((__bridge CMSampleBufferRef)c.samples[0]);
         NSDictionary *dspec = @{ (id)kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder: @NO };
