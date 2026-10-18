@@ -14,7 +14,7 @@ Only open problems are listed here. What has been fixed and measured is in [docs
 | Issue | What is known | Label |
 |---|---|---|
 | A second H.264 encode session is refused | The encoder library allows one engine per process and keeps it reserved until the session object is released (`CFRelease`; `VTCompressionSessionInvalidate` alone is not enough). A second hardware session while the first is open fails with -12908 ("engine already in use in this process"). Upstream #206 reports the same on an RTX 2070 Super. | VM-tested on Turing |
-| The encoder needs about 33 MiB (1080p) to 81 MiB (4K) of BAR1 | The library maps its working buffers through the BAR1 window and zero-fills them. On a card with a 256 MB BAR1 and a busy desktop (a game plus a screen-capture app) the map can fail; the session then fails with -12908 ("engine bring-up failed"). | read from source, VM-tested on Turing |
+| The encoder needs about 33 MiB (1080p) to 81 MiB (4K) of BAR1 unless built with `--low-bar` | The library maps its working buffers through the BAR1 window and zero-fills them. On a card with a 256 MB BAR1 and a busy desktop the map can fail and the session fails with -12908 ("engine bring-up failed"). `make_nvenc_t2d.py --low-bar` releases the windows after the zero-fill (see docs/H264.md); the peak while a session opens is still about 17 MB at 1080p and 67 MB at 4K. | VM-tested on Turing |
 | Bitrate control is opt-in | Without `NVMTL_VT_RC=1` the encoder runs at constant QP 23 and ignores `AverageBitRate` (about 12 Mbit/s at 1080p on the synthetic clip, far more on noisy content). The controller holds a requested bitrate in short tests; it has not been run on varied content, at other resolutions or on other cards. | VM-tested on Turing |
 | HEVC encode is off | Upstream reports a bitstream problem separate from the tiling one. | not tested here |
 | The encoder is registered in every process that makes a Metal device | That includes `ScreensharingAgent` and `loginwindow`, so a bad encoder would show up in screen sharing too. | read from logs, VM |
@@ -28,10 +28,11 @@ Only open problems are listed here. What has been fixed and measured is in [docs
 
 Roughly in order of value per effort. "Hardware" means it needs a real card and cannot be checked by reading code.
 
-1. **Shrink the encoder's BAR1 footprint.** Find which of the library's buffers are never read by the CPU after the
-   zero-fill (`buf_alloc`, `nve264_open`) and either unmap them after the fill or allocate them in system memory.
-   Done when a 1440p session opens on a 256 MB-BAR card while a game and a screen-capture app are running, and
-   `tools/test_nvenc_h264.py` still passes. Needs: hardware. Risk: medium (more binary patching).
+1. **Make `--low-bar` the default and shrink its peak.** Run `--low-bar` through longer sessions, other resolutions,
+   moving content and repeated connects; then make it the default. Separately, the 8x-luma pool is still one contiguous
+   map while it is zeroed (about 67 MB at 4K): zero it in pieces or let the GPU clear it. Done when a 4K session opens
+   on a 256 MB-BAR card with a game and a screen-capture app running, and `tools/test_nvenc_h264.py` still passes.
+   Needs: hardware. Risk: medium (binary patching).
 2. **Let a second session open.** Decide between a plugin-side workaround (release the first session when a second is
    requested), another binary patch, or documenting why not (the 2060 Super has one NVENC engine). Done when
    `tools/test_nvenc_h264.py --overlap-required` passes, or `docs/H264.md` says why it cannot. Needs: hardware.
