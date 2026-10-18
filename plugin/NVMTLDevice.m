@@ -185,7 +185,9 @@ static bool nvmtl_accel_armed(void)
 // one: on an RTX 3070 Laptop (issue #65, measured against Apple's software codecs) H.264 decode showed shifted macroblock
 // rows and a green stripe, and both encoders produced torn pictures. The decoder's only difference is its untiling mode
 // (1 = Blackwell, 0 = classic), so earlier GPUs load libnvdec_h264_t2d.dylib, the same library with mode 0 (51 dB on
-// GA104). The encoders are not registered on them, so apps use Apple's encoder until they are fixed for those GPUs.
+// GA104). The H.264 encoder is registered on Turing only, from libnvenc_h264_t2d.dylib (tools/make_nvenc_t2d.py: the
+// Blackwell encoder with its tiling loops replaced; see docs/H264.md). Other earlier GPUs and HEVC are not registered,
+// so apps use Apple's encoder until they are fixed and tested there.
 // Set from the I/O registry where no Metal device (and so no Vulkan device name) exists: -1 = unknown, use the name.
 static int g_video_blackwell = -1;
 // One string from the per-generation profile NVRM publishes on the GPU's PCI device ("nvrm-gpu-profile": chip,
@@ -217,6 +219,14 @@ static bool nvmtl_video_is_blackwell(void)
         return g_video_blackwell == 1;
     }
     return strstr(nvmtl_vk_device_name(), "NVK GB") != NULL;
+}
+// H.264 encode on Turing (experimental): the encoder library is the Blackwell build with its tiling loops patched to the
+// classic layout (libnvenc_h264_t2d.dylib). Other pre-Blackwell generations stay on Apple's encoder.
+static bool nvmtl_nvenc_h264_allowed(void)
+{
+    if (nvmtl_video_is_blackwell()) return true;
+    char gen[32];
+    return nvmtl_gpu_profile_string(CFSTR("generation"), gen, sizeof gen) && !strncmp(gen, "Turing", 6);
 }
 static void nvmtl_nvdec_register(void)
 {
@@ -250,7 +260,7 @@ static void nvmtl_nvenc_register(void)
     dispatch_once(&once, ^{
         const char *me = getprogname();
         if (getenv("NVMTL_NO_NVENC")) { nvlog("nvenc: NVMTL_NO_NVENC set - not registering in %s", me); return; }
-        if (!nvmtl_video_is_blackwell()) { nvlog("nvenc: %s is not Blackwell - H.264 encode stays on Apple's encoder", nvmtl_vk_device_name()); return; }
+        if (!nvmtl_nvenc_h264_allowed()) { nvlog("nvenc: %s is not Blackwell or Turing - H.264 encode stays on Apple's encoder", nvmtl_vk_device_name()); return; }
         if (!strcmp(me, "WindowServer")) return;
         typedef int32_t (*RegFn)(uint32_t, CFDictionaryRef, void *);
         RegFn reg = (RegFn)dlsym(RTLD_DEFAULT, "VTRegisterVideoEncoderWithInfo");
@@ -259,7 +269,7 @@ static void nvmtl_nvenc_register(void)
         if (!dladdr((const void *)nvmtl_nvenc_register, &di) || !di.dli_fname) { nvlog("nvenc: dladdr failed - not registering"); return; }
         char dir[1024], path[1200];
         strlcpy(dir, di.dli_fname, sizeof dir);
-        snprintf(path, sizeof path, "%s/libnvenc_h264.dylib", dirname(dir));
+        snprintf(path, sizeof path, "%s/%s", dirname(dir), nvmtl_video_is_blackwell() ? "libnvenc_h264.dylib" : "libnvenc_h264_t2d.dylib");
         void *h = dlopen(path, RTLD_NOW | RTLD_LOCAL);
         if (!h) { nvlog("nvenc: dlopen %s FAILED: %s", path, dlerror()); return; }
         void *fac = dlsym(h, "NVEncH264_CreateInstance");
