@@ -13,6 +13,7 @@ Nothing here has been run on other cards, and macOS 26 is untested.
 | Change | Where | Status |
 |---|---|---|
 | Hardware H.264 encode on Turing | `plugin/NVMTLDevice.m` (gate), `tools/make_nvenc_t2d.py` | see [docs/H264.md](docs/H264.md) |
+| Hardware HEVC encode on Turing, opt-in | `plugin/NVMTLDevice.m`, `tools/make_nvenc_hevc_t2d.py` | experimental, not tested on hardware; see [docs/HEVC.md](docs/HEVC.md) |
 | H.264 encode regression test | `tools/nvenc_psnr.m`, `tools/test_nvenc_h264.py` | see [docs/H264.md](docs/H264.md) |
 | Contribution policy: AI-assisted code is welcome | `AGENTS.md`, `CONTRIBUTING.md`, templates | n/a |
 
