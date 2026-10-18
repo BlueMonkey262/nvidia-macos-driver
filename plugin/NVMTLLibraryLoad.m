@@ -331,11 +331,17 @@ static NSString *nvmtl_spvcache_path(NSData *air, NSString *stage) {
 @implementation NVMTLAirDigest
 @end
 static const void *NVMTL_AIRDIGEST_KEY = &NVMTL_AIRDIGEST_KEY;
+// A long string whose state may be kept on it: for a short one the hash costs less than the lookup (and a tagged-pointer
+// string cannot hold an associated object), and a state kept on a mutable string would go stale. Mutability is tested with
+// -copy, which returns the string itself when it is immutable: on macOS 15 every long string is a __NSCFString, which
+// answers YES to isKindOfClass:NSMutableString even when it is immutable, so that test never allowed the cache (every
+// dispatch of VideoToolbox's Metal scaler hashed the whole module again).
+static BOOL nvmtl_air_cacheable(NSString *ll) {
+    return ll.length >= 4096 && [ll copy] == ll;
+}
 static NVMTLAirDigest *nvmtl_air_state(NSString *ll) {
     if (!ll) return nil;
-    // Keep the state only on long strings that cannot change: for a short one the hash costs less than the lookup (and a
-    // tagged-pointer string cannot hold an associated object), and a state kept on a mutable string would go stale.
-    const BOOL cacheable = ll.length >= 4096 && ![ll isKindOfClass:[NSMutableString class]];
+    const BOOL cacheable = nvmtl_air_cacheable(ll);
     NVMTLAirDigest *d = cacheable ? objc_getAssociatedObject(ll, NVMTL_AIRDIGEST_KEY) : nil;
     if (d) return d;
     NSData *air = [ll dataUsingEncoding:NSUTF8StringEncoding];
@@ -1443,10 +1449,8 @@ NSDictionary *nvmtl_air_names(NVMTLFunction *fn)
     }
 }
 
-NSUInteger nvmtl_air_max_tg(NVMTLFunction *fn)
+static NSUInteger nvmtl_air_max_tg_scan(NSString *ll, NSString *fname)
 {
-    NSString *ll = fn ? fn->_air : nil, *fname = fn ? fn->_fname : nil;
-    if (!ll.length || !fname.length) return 0;
     for (NSString *needle in @[[NSString stringWithFormat:@"@%@, ", fname], [NSString stringWithFormat:@"@\"%@\", ", fname]])
     for (NSRange r = NSMakeRange(0, ll.length);;) {
         NSRange m = [ll rangeOfString:needle options:NSLiteralSearch range:r];
@@ -1465,6 +1469,27 @@ NSUInteger nvmtl_air_max_tg(NVMTLFunction *fn)
         return 0;
     }
     return 0;
+}
+
+static const void *NVMTL_MAXTG_KEY = &NVMTL_MAXTG_KEY;
+// The answer depends only on the module text and the function name, and VideoToolbox's Metal scaler makes a pipeline state
+// (so asks) on every transfer: keep it on the module string, like its digest, instead of scanning the module each time.
+NSUInteger nvmtl_air_max_tg(NVMTLFunction *fn)
+{
+    NSString *ll = fn ? fn->_air : nil, *fname = fn ? fn->_fname : nil;
+    if (!ll.length || !fname.length) return 0;
+    if (!nvmtl_air_cacheable(ll)) return nvmtl_air_max_tg_scan(ll, fname);
+    NSMutableDictionary<NSString *, NSNumber *> *memo;
+    @synchronized (ll) {
+        memo = objc_getAssociatedObject(ll, NVMTL_MAXTG_KEY);
+        if (!memo) { memo = [NSMutableDictionary new]; objc_setAssociatedObject(ll, NVMTL_MAXTG_KEY, memo, OBJC_ASSOCIATION_RETAIN); }
+    }
+    NSNumber *hit;
+    @synchronized (memo) { hit = memo[fname]; }
+    if (hit) return hit.unsignedIntegerValue;
+    const NSUInteger v = nvmtl_air_max_tg_scan(ll, fname);
+    @synchronized (memo) { memo[fname] = @(v); }
+    return v;
 }
 
 NSArray<NSDictionary *> *nvmtl_argbuf_fields(NVMTLFunction *function, NSUInteger ownerBufferIndex)
