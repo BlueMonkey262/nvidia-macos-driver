@@ -69,8 +69,13 @@ with tempfile.TemporaryDirectory() as d:
         return p.returncode, out
 
     for w, h in SIZES:
-        rc, out = run([str(w), str(h), str(FRAMES)])
+        dump = os.path.join(d, f"stream_{w}x{h}.h264")
+        rc, out = run([str(w), str(h), str(FRAMES)], NVENC_PSNR_DUMP=dump)
         arm(f"{w}x{h}: hardware H.264 encode, {FRAMES} frames, PSNR above threshold", rc == 0, f"exit {rc}")
+        # Moonlight forces a one-reference decoder: every P slice must use one reference (TODO.md item 1)
+        chk = subprocess.run([sys.executable, str(ROOT / "tools/h264_refs.py"), dump], capture_output=True, text=True)
+        say(chk.stdout.strip() or chk.stderr.strip())
+        arm(f"{w}x{h}: every P slice uses one reference frame", chk.returncode == 0, f"exit {chk.returncode}")
 
     # what ffmpeg/Sunshine ask for in low-delay mode; VideoToolbox refuses it with -12902 unless the plugin drops it
     rc, out = run(["1920", "1080", str(FRAMES)], NVENC_PSNR_LOW_LATENCY="1")
