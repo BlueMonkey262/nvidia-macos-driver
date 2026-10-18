@@ -1,6 +1,11 @@
-# NullMoth NVIDIA Driver for macOS
+# NullMoth NVIDIA Driver for macOS (personal fork)
 
-A Metal driver for NVIDIA GeForce cards on macOS 15 Sequoia (Intel Macs and OpenCore PCs). It is open source; the
+> **This is a personal fork of [nullmoth/nvidia-macos-driver](https://github.com/nullmoth/nvidia-macos-driver), not
+> affiliated with NullMoth Systems.** It tracks upstream and adds a few changes, listed in [FORK.md](FORK.md):
+> hardware H.264 encode on Turing (RTX 20 / GTX 16) and its regression test. The license is unchanged
+> (source-available, noncommercial; see [License](#license)). Downloads, support and the 1401 app are upstream's.
+
+A Metal driver for NVIDIA GeForce cards on macOS 15 Sequoia (Intel Macs and OpenCore PCs). It is source-available and noncommercial; the
 kernel extensions, the Metal plugin and the shader translator are in this repository. The 1401 app that installs it
 (Mac and Windows) is its own project: [1401](https://github.com/nullmoth/1401).
 
@@ -17,7 +22,7 @@ testing is done on an RTX 5060, so other cards may have problems that haven't be
 If your PC doesn't boot macOS with OpenCore yet, set that up first with the
 [OpenCore Install Guide](https://dortania.github.io/OpenCore-Install-Guide/), then install the driver.
 
-Support the work: https://buymeacoffee.com/nullmoth
+Upstream project and support links: https://github.com/nullmoth/nvidia-macos-driver
 
 | | |
 |---|---|

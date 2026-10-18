@@ -9,6 +9,7 @@
 
 Fixes #
 
-- [ ] I wrote this change and this description myself (not an AI tool), and I can explain every line.
+- [ ] I reviewed every line (AI-assisted code is fine), I can explain it, and the test results above are what actually ran.
+- [ ] If this touches `kexts/`, a human booted it on real hardware or a passthrough VM, and I named the card.
 
-<!-- Please read CONTRIBUTING.md. AI-written pull requests are closed without review. -->
+<!-- Please read CONTRIBUTING.md. Label each result: read from source / builds / VM-tested (card) / not tested. -->

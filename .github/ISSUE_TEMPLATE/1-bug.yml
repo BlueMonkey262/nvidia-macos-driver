@@ -43,7 +43,7 @@ body:
     attributes:
       label: Written by you
       options:
-        - label: I wrote this report myself. AI-written issues are closed without review (see CONTRIBUTING.md).
+        - label: I checked that this report is accurate (AI help is fine; see CONTRIBUTING.md).
           required: true
   - type: input
     id: app
