@@ -14,6 +14,10 @@ AI-assisted code, descriptions and reports are welcome. Whoever submits the chan
 - Test reports must be honest. Say what you ran, on which card and macOS version, and label each result: read from
   source / builds / VM-tested (card) / not tested. "Builds" is not tested.
 
+## What to work on
+
+[TODO.md](TODO.md) lists known issues and a queue of tasks. Update it in the same change when you finish or learn something.
+
 ## Pull requests
 
 - One change per PR: a fix, a feature or a cleanup, not all three.

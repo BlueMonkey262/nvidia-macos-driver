@@ -16,6 +16,10 @@ Nothing here has been run on other cards, and macOS 26 is untested.
 | H.264 encode regression test | `tools/nvenc_psnr.m`, `tools/test_nvenc_h264.py` | see [docs/H264.md](docs/H264.md) |
 | Contribution policy: AI-assisted code is welcome | `AGENTS.md`, `CONTRIBUTING.md`, templates | n/a |
 
+## Known issues and what to work on
+
+See [TODO.md](TODO.md): known problems with their test status, and a queue of tasks anyone can pick up.
+
 ## Keeping in sync
 
 `git fetch upstream` and merge or rebase `main`. Upstream moves fast and some releases have been partly withdrawn
