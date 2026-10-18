@@ -227,8 +227,9 @@ static bool nvmtl_nvenc_h264_allowed(void)
 {
     if (nvmtl_video_is_blackwell()) return true;
     char gen[32];
-    return nvmtl_gpu_profile_string(CFSTR("generation"), gen, sizeof gen) && !strncmp(gen, "Turing", 6);
+    return nvmtl_gpu_profile_string(CFSTR("generation"), gen, sizeof gen) && !strcmp(gen, "Turing");   // not "Turing GTX 16" (TU116/TU117 have the older NVENC)
 }
+#include "nvmtl_vt_spec_hook.h"
 static void nvmtl_nvdec_register(void)
 {
     static dispatch_once_t once;
@@ -281,6 +282,7 @@ static void nvmtl_nvenc_register(void)
         int32_t st = reg('avc1', (__bridge CFDictionaryRef)info, fac);
         nvlog("nvenc: H.264 encoder %s in %s (VTRegisterVideoEncoderWithInfo -> %d, rating 1000, %s)",
               st ? "NOT registered" : "REGISTERED", me, (int)st, path);
+        if (!st) nvmtl_vt_spec_hook_install();
     });
 }
 static void nvmtl_nvdec_hevc_register(void)
