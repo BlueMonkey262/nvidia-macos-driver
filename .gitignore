@@ -11,3 +11,4 @@ __pycache__/
 .env
 *.pem
 id_*
+tools/vmbench/out/
