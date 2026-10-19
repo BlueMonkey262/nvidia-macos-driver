@@ -16,7 +16,7 @@
 // which still runs once.
 // NVMTL_NO_VT_SPEC_HOOK=1 turns it off.
 // Third part, opt-in with NVMTL_VT_RC=1: bitrate control. The encoder library runs at a constant QP and ignores
-// AverageBitRate, but it re-reads its QP for every frame and SetProperty(Quality) writes it. For a hardware H.264 session
+// AverageBitRate, but it re-reads its QP for every frame and SetProperty(Quality) writes it. For a hardware H.264 or HEVC session
 // the output callback is wrapped to see every encoded frame's size, nvmtl_vt_ratecontrol.h turns those sizes and the
 // AverageBitRate / ExpectedFrameRate seen through a rebind of VTSessionSetProperty into the next QP, and the quality for
 // it is set through the original VTSessionSetProperty (so it does not pass through the hook again).
@@ -170,7 +170,7 @@ static int32_t nvmtl_vt_create_hook(CFAllocatorRef a, int32_t w, int32_t h, uint
     nvmtl_vt_cache_prime(w, h, codec, s);
     nvmtl_vt_rcs *ctx = NULL;
     void *use_cb = cb, *use_ref = refcon;
-    if (g_rc_enabled && codec == 'avc1' && cb && out) {
+    if (g_rc_enabled && nvmtl_vt_codec_cached(codec) && cb && out) {
         ctx = (nvmtl_vt_rcs *)calloc(1, sizeof *ctx);
         if (ctx) { ctx->cb = (nvmtl_vt_out_cb)cb; ctx->refcon = refcon; use_cb = (void *)nvmtl_vt_rc_output; use_ref = ctx; }
     }
@@ -191,7 +191,8 @@ static int32_t nvmtl_vt_create_hook(CFAllocatorRef a, int32_t w, int32_t h, uint
             if (g_rcs[slot]) g_rcs[slot]->active = 0;
             ctx->session = session; ctx->active = 1; g_rcs[slot] = ctx;
             pthread_mutex_unlock(&g_rcs_lock);
-            nvlog("nvenc: bitrate control on for a %dx%d hardware session in %s", (int)w, (int)h, getprogname());
+            nvlog("nvenc: bitrate control on for a %dx%d %s hardware session in %s", (int)w, (int)h,
+                  codec == 'hvc1' ? "HEVC" : "H.264", getprogname());
         }
         if (hw) CFRelease(hw);
         // The context is never freed: the session may still deliver a frame to it after a failed or finished create, and a

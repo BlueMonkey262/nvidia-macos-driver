@@ -2,7 +2,8 @@
 // on the real hardware encoder? A synthetic moving picture (720p60, 360 frames) is encoded with AverageBitRate set; the
 // bitrate achieved after the first second is printed per second and overall. Needs the Turing encoder on macOS (a VM with the
 // driver), no other process holding the card's BAR1 window (a session needs ~15-33 MB of it).
-// usage: [NVMTL_VT_RC=1] vt_rc_probe [target_bits_per_second [frames [sessions]]]    target 0 = set no AverageBitRate (the library's constant QP)
+// usage: [NVMTL_VT_RC=1] [PROBE_CODEC=hevc] vt_rc_probe [target_bits_per_second [frames [sessions]]]
+//   target 0 = set no AverageBitRate (the library's constant QP); H.264 is the default codec.
 //   sessions > 1 runs that many sessions one after another (create, encode, release) in this process: every one must stay within
 //   25% of the target, which catches a control table that fills up. exit: 0 ok, 1 a session was out of window, 2 create failed
 // build: clang -fobjc-arc -DHOOK_HEADER='"<path>/plugin/nvmtl_vt_spec_hook.h"' -o vt_rc_probe tools/vt_rc_probe.m \
@@ -21,6 +22,7 @@
 #endif
 #include HOOK_HEADER
 static NSMutableArray *g_sizes; static NSMutableArray *g_idr;
+static CMVideoCodecType g_codec = kCMVideoCodecType_H264;
 static void out_cb(void *r, void *src, OSStatus st, VTEncodeInfoFlags f, CMSampleBufferRef sb)
 {
     if (st || !sb) return;
@@ -46,7 +48,7 @@ static double run_session(int W, int H, int N, double fps, double target, int sh
     @autoreleasepool {
     [g_sizes removeAllObjects]; [g_idr removeAllObjects];
     VTCompressionSessionRef cs = NULL;
-    OSStatus st = VTCompressionSessionCreate(NULL, W, H, kCMVideoCodecType_H264, (__bridge CFDictionaryRef)@{ (id)kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: @YES, @"EnableLowLatencyRateControl": @YES }, NULL, NULL, out_cb, NULL, &cs);
+    OSStatus st = VTCompressionSessionCreate(NULL, W, H, g_codec, (__bridge CFDictionaryRef)@{ (id)kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: @YES, @"EnableLowLatencyRateControl": @YES }, NULL, NULL, out_cb, NULL, &cs);
     if (!cs) { printf("create failed %d (BAR1 window full? other GPU apps running?)\n", (int)st); return -1; }
     VTSessionSetProperty(cs, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue); VTSessionSetProperty(cs, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
     VTSessionSetProperty(cs, kVTCompressionPropertyKey_MaxKeyFrameInterval, (__bridge CFTypeRef)@100000); VTSessionSetProperty(cs, kVTCompressionPropertyKey_ExpectedFrameRate, (__bridge CFTypeRef)@(fps));
@@ -59,10 +61,16 @@ static double run_session(int W, int H, int N, double fps, double target, int sh
     for (NSUInteger s0 = 0; s0 + 60 <= n; s0 += 60) { double b = 0; for (NSUInteger i = s0; i < s0 + 60; i++) b += [g_sizes[i] doubleValue]; if (show) printf(" %.1f", b * 8 / 1e6); if (s0 >= 60) { total += b * 8 / 1e6; cnt++; } }
     if (show) printf("\n");
     VTCompressionSessionInvalidate(cs); CFRelease(cs);
-    return cnt ? total / cnt : 0; }
+    // A bitrate mean is not a passing result if the encoder lost frames.
+    return n == (NSUInteger)N && cnt ? total / cnt : -1; }
 }
 int main(int argc, char **argv) { @autoreleasepool {
     double target = argc > 1 ? atof(argv[1]) : 0; int N = argc > 2 ? atoi(argv[2]) : 360, S = argc > 3 ? atoi(argv[3]) : 1, W = 1280, H = 720; const double fps = 60;
+    const char *codec = getenv("PROBE_CODEC");
+    if (codec && !strcmp(codec, "hevc")) g_codec = kCMVideoCodecType_HEVC;
+    else if (codec && strcmp(codec, "h264")) { fprintf(stderr, "PROBE_CODEC must be h264 or hevc\n"); return 2; }
+    if (N < 120 || S < 1 || !isfinite(target) || target < 0) { fprintf(stderr, "need at least 120 frames, one session and a nonnegative finite target\n"); return 2; }
+    printf("codec: %s\n", g_codec == kCMVideoCodecType_HEVC ? "HEVC" : "H.264");
     g_sizes = [NSMutableArray array]; g_idr = [NSMutableArray array];
     nvmtl_vt_spec_hook_install();                                  // the hook under test, in this process
     id<MTLDevice> dev = MTLCreateSystemDefaultDevice(); (void)dev; usleep(300000);
@@ -70,9 +78,10 @@ int main(int argc, char **argv) { @autoreleasepool {
     for (int k = 0; k < S; k++) {
         const double m = run_session(W, H, N, fps, target, S == 1);
         if (m < 0) _exit(2);
+        const int off = target > 0 && fabs(m * 1e6 - target) > 0.25 * target;
+        bad += off;  // enforce the same window for one session and repeated sessions
         if (S > 1) {
-            const int off = target > 0 && fabs(m * 1e6 - target) > 0.25 * target;   // controlled sessions stay within 25% of the target
-            printf("session %d of %d: mean %.2f Mbit/s (target %.2f)%s\n", k + 1, S, m, target / 1e6, off ? "  OUT OF WINDOW" : ""); bad += off;
+            printf("session %d of %d: mean %.2f Mbit/s (target %.2f)%s\n", k + 1, S, m, target / 1e6, off ? "  OUT OF WINDOW" : "");
         } else printf("after the first second: mean %.2f Mbit/s\n", m);
     }
     fflush(stdout); _exit(bad ? 1 : 0); } }

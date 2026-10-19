@@ -2,7 +2,8 @@
 
 The baseline encoder works on an RTX 2060 Super, macOS 15.8.1 VM. Turing support stays opt-in.
 The optional CPU speed patches below have passed machine-code emulation; their hardware quality and speed checks
-are pending. The existing bitrate controller remains H.264-only; HEVC uses constant QP.
+are pending. The new HEVC bitrate-control wiring builds and passes a mocked callback test, but its achieved
+bitrate on the GPU has not been measured.
 
 ## Baseline fix and measured results
 
@@ -69,6 +70,29 @@ relocated load address: 32 comparisons, including both planes, padded widths, 8/
 It also checks the other helper fallback, preserved registers, branch destinations, all flag combinations,
 unchanged input data, and rejection of changed sites or occupied caves. **Host emulation passed; no GPU involved.**
 The default patcher and HEVC stream-parser tests also pass. No performance gain is claimed for these flags yet.
+
+## HEVC bitrate control
+
+`NVMTL_VT_RC=1` now wraps hardware HEVC callbacks as well as H.264. The HEVC library reloads its QP each frame,
+and its Quality setter uses the same conversion: `qp = trunc(-41 * quality + 51.5)`. The existing controller
+therefore uses the same inverse. HEVC sync-frame attachments use the same `NotSync` key.
+
+The controller header passes its host simulations. A macOS test with fake VT functions checks feedback on both
+codecs, IDR handling, software-session pass-through and the opt-out. The plugin and probe compile on macOS.
+**Builds and callback-tested; hardware bitrate convergence and picture correctness with changing QP are pending.**
+
+```bash
+clang -fobjc-arc -O1 -o vt_rc_hook_test tools/vt_rc_hook_test.m \
+  -framework Foundation -framework VideoToolbox -framework CoreMedia
+./vt_rc_hook_test
+clang -fobjc-arc -O1 -o vt_rc_probe tools/vt_rc_probe.m \
+  -framework Foundation -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework Metal
+PROBE_CODEC=hevc NVMTL_VT_RC=1 ./vt_rc_probe 2000000 360 1
+```
+
+The bitrate probe requires every submitted frame to return and checks the ±25% mean-bitrate window for both one
+session and repeated sessions. Use a constant-QP run with target 0 as a control, then several targets and at least
+nine sequential sessions to exercise table replacement. A passing bitrate result still needs a decode-quality check.
 
 ## Hardware validation still required
 
