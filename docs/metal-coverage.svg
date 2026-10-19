@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 602" width="1200" height="602" font-family="sans-serif"><rect width="1200" height="602" fill="#0f1218"/>
-<text x="6" y="22" font-size="16" font-weight="700" fill="#e6e9ef">Metal API coverage: 691/901 methods implemented (77%), 33 of them by Apple's own code</text>
-<rect x="6" y="36" width="12" height="12" fill="#6b7280"/><text x="23" y="47" font-size="12" fill="#c9ced8">Not implemented or stub (210)</text>
+<text x="6" y="22" font-size="16" font-weight="700" fill="#e6e9ef">Metal API coverage: 689/901 methods implemented (76%), 33 of them by Apple's own code</text>
+<rect x="6" y="36" width="12" height="12" fill="#6b7280"/><text x="23" y="47" font-size="12" fill="#c9ced8">Not implemented or stub (212)</text>
 <rect x="240" y="36" width="12" height="12" fill="#2fa6a0"/><text x="257" y="47" font-size="12" fill="#c9ced8">Apple's code, not ours (33)</text>
 <rect x="460" y="36" width="12" height="12" fill="#dc2626"/><text x="477" y="47" font-size="12" fill="#c9ced8">Very slow (11)</text>
-<rect x="589" y="36" width="12" height="12" fill="#eab308"/><text x="606" y="47" font-size="12" fill="#c9ced8">Needs improvement (100)</text>
-<rect x="781" y="36" width="12" height="12" fill="#22a559"/><text x="798" y="47" font-size="12" fill="#c9ced8">Works great (395)</text>
-<rect x="931" y="36" width="12" height="12" fill="#9333ea"/><text x="948" y="47" font-size="12" fill="#c9ced8">Differs from Apple (78)</text>
+<rect x="589" y="36" width="12" height="12" fill="#eab308"/><text x="606" y="47" font-size="12" fill="#c9ced8">Needs improvement (111)</text>
+<rect x="781" y="36" width="12" height="12" fill="#22a559"/><text x="798" y="47" font-size="12" fill="#c9ced8">Works great (373)</text>
+<rect x="931" y="36" width="12" height="12" fill="#9333ea"/><text x="948" y="47" font-size="12" fill="#c9ced8">Differs from Apple (87)</text>
 <rect x="1123" y="36" width="12" height="12" fill="#4f78c4"/><text x="1140" y="47" font-size="12" fill="#c9ced8">Not yet rated (74)</text>
 <g><title>MTLRenderCommandEncoder: Not implemented or stub 30, Very slow 4, Needs improvement 23, Works great 47, Differs from Apple 32</title>
 <rect x="1.00" y="63.00" width="26.07" height="25.90" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
@@ -326,7 +326,7 @@
 <rect x="340.95" y="62.00" width="181.13" height="202.50" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="345.95" y="77.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Texture</text>
 </g>
-<g><title>MTLComputeCommandEncoder: Not implemented or stub 10, Very slow 1, Needs improvement 9, Works great 21, Differs from Apple 5</title>
+<g><title>MTLComputeCommandEncoder: Not implemented or stub 10, Very slow 1, Needs improvement 11, Works great 18, Differs from Apple 6</title>
 <rect x="341.95" y="265.50" width="25.59" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="367.54" y="265.50" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="393.14" y="265.50" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
@@ -337,10 +337,10 @@
 <rect x="341.95" y="291.31" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="367.54" y="291.31" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="393.14" y="291.31" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="418.73" y="291.31" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="418.73" y="291.31" width="25.59" height="25.81" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="444.32" y="291.31" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="469.91" y="291.31" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="495.50" y="291.31" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="495.50" y="291.31" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="341.95" y="317.11" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="367.54" y="317.11" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="393.14" y="317.11" width="25.59" height="25.81" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
@@ -368,7 +368,7 @@
 <rect x="461.38" y="394.53" width="29.86" height="25.81" fill="#dc2626" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="491.23" y="394.53" width="29.86" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="341.95" y="420.34" width="29.86" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="371.81" y="420.34" width="29.86" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="371.81" y="420.34" width="29.86" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="401.67" y="420.34" width="29.86" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="431.52" y="420.34" width="29.86" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="461.38" y="420.34" width="29.86" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -376,7 +376,7 @@
 <rect x="340.95" y="264.50" width="181.13" height="182.65" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="345.95" y="279.50" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">ComputeCommandEncoder</text>
 </g>
-<g><title>MTLCommandBuffer: Not implemented or stub 7, Needs improvement 3, Works great 26, Differs from Apple 3</title>
+<g><title>MTLCommandBuffer: Not implemented or stub 7, Needs improvement 4, Works great 24, Differs from Apple 4</title>
 <rect x="341.95" y="448.15" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="367.54" y="448.15" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="393.14" y="448.15" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
@@ -398,10 +398,10 @@
 <rect x="444.32" y="499.10" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="469.91" y="499.10" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="495.50" y="499.10" width="25.59" height="25.48" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="341.95" y="524.57" width="29.86" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="341.95" y="524.57" width="29.86" height="25.48" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="371.81" y="524.57" width="29.86" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="401.67" y="524.57" width="29.86" height="25.48" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="431.52" y="524.57" width="29.86" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="431.52" y="524.57" width="29.86" height="25.48" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="461.38" y="524.57" width="29.86" height="25.48" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="491.23" y="524.57" width="29.86" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="341.95" y="550.05" width="29.86" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
@@ -592,7 +592,7 @@
 <rect x="783.76" y="62.00" width="115.02" height="131.32" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="788.76" y="77.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">AccelerationStr</text>
 </g>
-<g><title>MTLIndirectCommandBuffer: Needs improvement 1, Works great 17, Differs from Apple 1</title>
+<g><title>MTLIndirectCommandBuffer: Not implemented or stub 1, Needs improvement 1, Works great 16, Differs from Apple 1</title>
 <rect x="899.77" y="63.00" width="25.52" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="925.29" y="63.00" width="25.52" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="950.80" y="63.00" width="25.52" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
@@ -609,7 +609,7 @@
 <rect x="925.29" y="140.59" width="25.52" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="950.80" y="140.59" width="25.52" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="976.32" y="140.59" width="25.52" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="899.77" y="166.45" width="34.02" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="899.77" y="166.45" width="34.02" height="25.86" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="933.79" y="166.45" width="34.02" height="25.86" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="967.81" y="166.45" width="34.02" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="898.77" y="62.00" width="104.06" height="131.32" fill="none" stroke="#0f1218" stroke-width="2"/>
@@ -637,10 +637,10 @@
 <rect x="1002.83" y="62.00" width="98.58" height="131.32" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1007.83" y="77.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">IOCommandBuf</text>
 </g>
-<g><title>MTLRenderPipelineState: Not implemented or stub 3, Works great 11, Differs from Apple 4</title>
-<rect x="1102.42" y="63.00" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<g><title>MTLRenderPipelineState: Not implemented or stub 3, Needs improvement 3, Works great 5, Differs from Apple 7</title>
+<rect x="1102.42" y="63.00" width="24.15" height="25.86" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1126.56" y="63.00" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1150.71" y="63.00" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1150.71" y="63.00" width="24.15" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1174.85" y="63.00" width="24.15" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1102.42" y="88.86" width="24.15" height="25.86" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1126.56" y="88.86" width="24.15" height="25.86" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -648,11 +648,11 @@
 <rect x="1174.85" y="88.86" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1102.42" y="114.73" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1126.56" y="114.73" width="24.15" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1150.71" y="114.73" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1174.85" y="114.73" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1150.71" y="114.73" width="24.15" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1174.85" y="114.73" width="24.15" height="25.86" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1102.42" y="140.59" width="32.19" height="25.86" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1134.61" y="140.59" width="32.19" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1166.81" y="140.59" width="32.19" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1134.61" y="140.59" width="32.19" height="25.86" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1166.81" y="140.59" width="32.19" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1102.42" y="166.45" width="32.19" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1134.61" y="166.45" width="32.19" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1166.81" y="166.45" width="32.19" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
@@ -756,7 +756,7 @@
 <rect x="774.13" y="193.32" width="95.03" height="105.96" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="779.13" y="208.32" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">ResidencySet</text>
 </g>
-<g><title>MTLResource: Needs improvement 1, Works great 12, Differs from Apple 1</title>
+<g><title>MTLResource: Not implemented or stub 1, Needs improvement 1, Works great 11, Differs from Apple 1</title>
 <rect x="775.13" y="300.27" width="23.26" height="25.99" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="798.39" y="300.27" width="23.26" height="25.99" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="821.64" y="300.27" width="23.26" height="25.99" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
@@ -768,7 +768,7 @@
 <rect x="775.13" y="352.25" width="31.01" height="25.99" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="806.14" y="352.25" width="31.01" height="25.99" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="837.15" y="352.25" width="31.01" height="25.99" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="775.13" y="378.24" width="31.01" height="25.99" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="775.13" y="378.24" width="31.01" height="25.99" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="806.14" y="378.24" width="31.01" height="25.99" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="837.15" y="378.24" width="31.01" height="25.99" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="774.13" y="299.27" width="95.03" height="105.96" fill="none" stroke="#0f1218" stroke-width="2"/>
@@ -791,7 +791,7 @@
 <rect x="774.13" y="405.23" width="95.03" height="98.39" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="779.13" y="420.23" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">ComputePipel</text>
 </g>
-<g><title>MTLFunction: Needs improvement 1, Works great 10, Differs from Apple 2</title>
+<g><title>MTLFunction: Needs improvement 4, Works great 5, Differs from Apple 4</title>
 <rect x="775.13" y="504.61" width="23.26" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="798.39" y="504.61" width="23.26" height="24.10" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="821.64" y="504.61" width="23.26" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
@@ -799,12 +799,12 @@
 <rect x="775.13" y="528.71" width="31.01" height="24.10" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="806.14" y="528.71" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="837.15" y="528.71" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="775.13" y="552.81" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="806.14" y="552.81" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="837.15" y="552.81" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="775.13" y="552.81" width="31.01" height="24.10" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="806.14" y="552.81" width="31.01" height="24.10" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="837.15" y="552.81" width="31.01" height="24.10" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="775.13" y="576.90" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="806.14" y="576.90" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="837.15" y="576.90" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="806.14" y="576.90" width="31.01" height="24.10" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="837.15" y="576.90" width="31.01" height="24.10" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="774.13" y="503.61" width="95.03" height="98.39" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="779.13" y="518.61" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Function</text>
 </g>
@@ -915,17 +915,17 @@
 <rect x="869.16" y="453.54" width="96.89" height="74.23" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="874.16" y="468.54" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Rasterizatio</text>
 </g>
-<g><title>MTLTextureBinding: Works great 7, Differs from Apple 3</title>
+<g><title>MTLTextureBinding: Needs improvement 1, Works great 5, Differs from Apple 4</title>
 <rect x="870.16" y="528.77" width="23.72" height="24.08" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="893.88" y="528.77" width="23.72" height="24.08" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="917.60" y="528.77" width="23.72" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="941.33" y="528.77" width="23.72" height="24.08" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="870.16" y="552.85" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="901.79" y="552.85" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="901.79" y="552.85" width="31.63" height="24.08" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="933.42" y="552.85" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="870.16" y="576.92" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="901.79" y="576.92" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="933.42" y="576.92" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="933.42" y="576.92" width="31.63" height="24.08" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="869.16" y="527.77" width="96.89" height="74.23" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="874.16" y="542.77" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">TextureBindi</text>
 </g>
@@ -976,13 +976,13 @@
 <rect x="966.05" y="371.44" width="77.98" height="64.56" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="971.05" y="386.44" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">CommandEn</text>
 </g>
-<g><title>MTLBinding: Works great 6</title>
+<g><title>MTLBinding: Needs improvement 1, Works great 4, Differs from Apple 1</title>
 <rect x="967.05" y="437.00" width="25.33" height="26.67" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="992.38" y="437.00" width="25.33" height="26.67" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="992.38" y="437.00" width="25.33" height="26.67" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1017.70" y="437.00" width="25.33" height="26.67" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="967.05" y="463.66" width="25.33" height="26.67" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="992.38" y="463.66" width="25.33" height="26.67" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1017.70" y="463.66" width="25.33" height="26.67" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1017.70" y="463.66" width="25.33" height="26.67" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="966.05" y="436.00" width="77.98" height="55.33" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="971.05" y="451.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Binding</text>
 </g>
