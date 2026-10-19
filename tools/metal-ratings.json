@@ -381,9 +381,9 @@
    "status": "great"
   },
   "type": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:1925; plugin/NVMTLGL.m:346,401 (model-reviewed, not tested)",
-   "note": "Objects exposes MTLArgumentType; GL returns MTLBindingType. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLBufferArgument/NVMTLTextureArgument return MTLBindingType (NVMTLObjects.m:1958,1962), but sampler bindings are plain NVMTLArgument whose ",
+   "status": "great"
   }
  },
  "MTLBlitCommandEncoder": {
@@ -423,9 +423,9 @@
    "status": "great"
   },
   "copyFromTexture:toTexture:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4732 (model-reviewed, not tested)",
-   "note": "Apple docs copy all matching slices/levels; ours only copies slice 0 level 0 at full level-0 size.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:4884-4892 copies every overlapping slice and mip via sliceCount/levelCount (fixed in c655a5f; tested in tools/test_metal_resour",
+   "status": "great"
   },
   "copyIndirectCommandBuffer:sourceRange:destination:destinationIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:4722-4729 (model-reviewed, not tested)",
@@ -550,9 +550,9 @@
    "status": "great"
   },
   "contents": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:876; plugin/NVMTLDevice.m:583-607 (model-reviewed, not tested)",
-   "note": "Apple returns nil for Private; we return map after sysmem fallback or bytesNoCopy private.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:876-879 returns NULL when _storage == MTLStorageModePrivate (fixed in c655a5f; tested in tools/test_metal_resource_semantics.m)",
+   "status": "great"
   },
   "cpuCacheMode": {
    "evidence": "read from source: plugin/NVMTLObjects.m:838; plugin/NVMTLObjects.h:309 (model-reviewed, not tested)",
@@ -804,19 +804,19 @@
    "status": "great"
   },
   "errorOptions": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4870,5147 (model-reviewed, not tested)",
-   "note": "Always None; Metal reflects descriptor errorOptions, which creation ignores.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:5025 returns _errorOptions; commandBufferWithDescriptor: sets it from the descriptor at 5317-5322 (fixed in c655a5f).",
+   "status": "great"
   },
   "kernelEndTime": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:5084; plugin/NVMTLEventSync.m:442 (model-reviewed, not tested)",
-   "note": "Host uptime at execution finish; Apple is schedule-end host time. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: schedule-end host time set in NVMTLEventSync.m:404-407 (nvmtlMarkScheduled); getter NVMTLObjects.m:5245-5248 returns 0 until _executionDone (f",
+   "status": "great"
   },
   "kernelStartTime": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:5083; plugin/NVMTLEventSync.m:556 (model-reviewed, not tested)",
-   "note": "May be non-zero before Completed; Metal documents 0 until completed.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:5240-5243 returns 0 until completed; start stamped at schedule in NVMTLEventSync.m:405-406 (fixed in c655a5f; tested in tools/t",
+   "status": "great"
   },
   "label": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5102 (model-reviewed, not tested)",
@@ -874,9 +874,9 @@
    "status": "stub"
   },
   "retainedReferences": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4869,5146 (model-reviewed, not tested)",
-   "note": "Always YES; commandBufferWithUnretainedReferences still retains.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:5024 returns _retainedReferences set by queue creation paths (5311-5322); no longer hard-coded YES (fixed in c655a5f).",
+   "status": "great"
   },
   "setLabel:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5101 (model-reviewed, not tested)",
@@ -963,9 +963,9 @@
    "status": "great"
   },
   "commandBufferWithDescriptor:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:5147, :4869 (model-reviewed, not tested)",
-   "note": "Ignores descriptor; CB always retainedReferences YES unlike descriptor retainedReferences:NO.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:5317-5323 applies d.retainedReferences and d.errorOptions onto the new CB (fixed in c655a5f; tested in tools/test_metal_resourc",
+   "status": "great"
   },
   "commandBufferWithUnretainedReferences": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5146, :4869 (model-reviewed, not tested)",
@@ -1075,9 +1075,9 @@
    "status": "great"
   },
   "setAccelerationStructure:atBufferIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4350-4354 (model-reviewed, not tested)",
-   "note": "AS binds at i; uid always slot 31, so i==31 clobbers AS. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:4484-4489 binds AS at i and only writes the uid side table to slot 31 when i != 31 (fixed in c655a5f).",
+   "status": "great"
   },
   "setBuffer:offset:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:4311 (model-reviewed, not tested)",
@@ -1105,9 +1105,9 @@
    "status": "improve"
   },
   "setBuffers:offsets:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4564 (model-reviewed, not tested)",
-   "note": "Skips nil entries, so the range API cannot unbind a slot as Metal allows.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:4716-4717 forwards each entry including nil to setBuffer: which unbinds (4457-4463); fixed via 5fbbe52 nil-unbind work; tested ",
+   "status": "great"
   },
   "setBytes:length:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:4356 (model-reviewed, not tested)",
@@ -1150,14 +1150,14 @@
    "status": "great"
   },
   "setSamplerState:lodMinClamp:lodMaxClamp:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4561 (model-reviewed, not tested)",
-   "note": "Drops both LOD clamps; Metal rebinds the sampler with the requested clamps.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:4699-4714 applies clamps via nvmtl_sampler_lod_clamp / nvmtl_pixel_state_lod (2737+); fixed in bf7b107; tested in tools/test_me",
+   "status": "great"
   },
   "setSamplerStates:lodMinClamps:lodMaxClamps:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4260 (model-reviewed, not tested)",
-   "note": "Forwards clamps to a setter that ignores them, so no requested LOD clamp is applied.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:4406-4408 loops into setSamplerState:lodMinClamp:lodMaxClamp:atIndex: which now honors clamps.",
+   "status": "great"
   },
   "setSamplerStates:withRange:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:4570 (model-reviewed, not tested)",
@@ -1165,14 +1165,14 @@
    "status": "great"
   },
   "setTexture:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4443 (model-reviewed, not tested)",
-   "note": "Nil logs and returns without unbinding, while Metal's nil clears the slot.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:4578-4584 nil calls nvmtl_unbind_texture (4271-4275); fixed in 5fbbe52; tested in tools/test_metal_nil_unbind.m.",
+   "status": "great"
   },
   "setTextures:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4567 (model-reviewed, not tested)",
-   "note": "Skips nil entries, so the range API cannot unbind slots.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:4719-4720 forwards each texture including nil to setTexture:atIndex: which unbinds.",
+   "status": "great"
   },
   "setThreadgroupMemoryLength:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:4524 (model-reviewed, not tested)",
@@ -1262,9 +1262,9 @@
    "status": "great"
   },
   "shaderValidation": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3916 (model-reviewed, not tested)",
-   "note": "Always MTLShaderValidationDisabled; Metal reports the pipeline's requested validation state.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:4037 returns _shaderValidation; set from the compute descriptor in NVMTLDevice.m when creating the PSO (994c95f); tested in too",
+   "status": "great"
   },
   "staticThreadgroupMemoryLength": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3924; plugin/NVMTLSassResolve.m:379 (model-reviewed, not tested)",
@@ -1502,9 +1502,9 @@
    "status": "great"
   },
   "newArgumentEncoderWithArguments:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1922-1945; plugin/NVMTLObjects.m:2174-2180 (model-reviewed, not tested)",
-   "note": "Builds fields by type; encodedLength always ends fields at +8 bytes.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLDevice.m:1926-1951 sizes fields by dataType and sets e->_airSize = off; encodedLength uses _airSize (NVMTLObjects.m:2210-2211). Fixed in ",
+   "status": "great"
   },
   "newArgumentEncoderWithBufferBinding:": {
    "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice.m:1922 (model-reviewed, not tested)",
@@ -1517,14 +1517,14 @@
    "status": "improve"
   },
   "newBufferWithBytes:length:options:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:598-607 (model-reviewed, not tested)",
-   "note": "Remaps Private\u2192Shared then retags; Apple documents Private invalid for this API.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLDevice.m:585-591 returns nil for Private/Memoryless instead of remapping Private->Shared (fixed in 994c95f; tested in tools/test_metal_ap",
+   "status": "great"
   },
   "newBufferWithBytesNoCopy:length:options:deallocator:": {
-   "evidence": "read from source: plugin/NVMTLDevice_contract.m:19-69 (model-reviewed, not tested)",
-   "note": "Private/Memoryless returns nil; source notes a real driver aborts on Private.",
-   "status": "differs"
+   "evidence": "re-read from source; model-reviewed, not tested",
+   "note": "The purple rating was wrong: read from source: NVMTLDevice_contract.m:23-25 returns nil for Private/Memoryless. Apple's public API rejects Private for ...WithBytes variants; a debug driver ",
+   "status": "great"
   },
   "newBufferWithLength:options:": {
    "evidence": "read from source: plugin/NVMTLDevice.m:577-596 (model-reviewed, not tested)",
@@ -1662,9 +1662,9 @@
    "status": "great"
   },
   "newLibraryWithSource:options:completionHandler:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1215-1217 (model-reviewed, not tested)",
-   "note": "Compiles synchronously on the caller then async-delivers; Apple API is async.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLDevice.m:1211-1213 still compiles synchronously on the caller via newLibraryWithSource:error:, then dispatch_async delivers the handler. ",
+   "status": "great"
   },
   "newLibraryWithSource:options:error:": {
    "evidence": "read from source: plugin/NVMTLDevice.m:1208-1213 (model-reviewed, not tested)",
@@ -1672,9 +1672,9 @@
    "status": "great"
   },
   "newLibraryWithStitchedDescriptor:completionHandler:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1156-1159 (model-reviewed, not tested)",
-   "note": "Stitches/bridges on the caller then async-delivers; Apple API is async.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLDevice.m:1149-1154 stitches/bridges synchronously on the caller then async-delivers the handler (994c95f only moved the callback off-stac",
+   "status": "great"
   },
   "newLibraryWithStitchedDescriptor:error:": {
    "evidence": "read from source: plugin/NVMTLDevice.m:1028-1090 (model-reviewed, not tested)",
@@ -1717,9 +1717,9 @@
    "status": "improve"
   },
   "newRenderPipelineStateWithMeshDescriptor:options:completionHandler:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2639-2643 (model-reviewed, not tested)",
-   "note": "Runs sync on caller then async-delivers; Apple mesh completion is async.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLLibraryLoad.m:2665-2669 builds the mesh PSO synchronously on the caller then dispatch_async to the completion handler.",
+   "status": "great"
   },
   "newRenderPipelineStateWithMeshDescriptor:options:reflection:error:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2589-2637 (model-reviewed, not tested)",
@@ -2030,14 +2030,14 @@
    "status": "great"
   },
   "newArgumentEncoderWithBufferIndex:reflection:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:1841-1845 (model-reviewed, not tested)",
-   "note": "Writes *reflection before encode; can set on nil encoder. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:1853-1857 builds the encoder first, then sets *reflection only when the encoder is non-nil (else nil); commit 994c95f st",
+   "status": "great"
   },
   "options": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:1805 (model-reviewed, not tested)",
-   "note": "Always MTLFunctionOptionNone; newFunctionWithDescriptor: also drops the descriptor's options.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:1817 returns _options; plugin/NVMTLObjects.m:2540 copies descriptor.options in newFunctionWithDescriptor:; commit 994c95",
+   "status": "great"
   },
   "patchControlPointCount": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1835-1839 (model-reviewed, not tested)",
@@ -2055,9 +2055,9 @@
    "status": "great"
   },
   "stageInputAttributes": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:1833,1880-1891 (model-reviewed, not tested)",
-   "note": "Reuses vertex_attributes helper cast as MTLAttribute*. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:1845 still returns (NSArray<MTLAttribute *> *)nvmtl_vertex_attributes_for(self), which allocates NVMTLVertexAttribute (p",
+   "status": "great"
   },
   "vertexAttributes": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1832,1877-1878,1880-1891 (model-reviewed, not tested)",
@@ -2196,9 +2196,9 @@
  },
  "MTLIndirectCommandBuffer": {
   "allocatedSize": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4010 (model-reviewed, not tested)",
-   "note": "Always returns 0; Metal allocatedSize is bytes allocated for the resource.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLDevice.m:1917-1918 sets icb->_allocatedSize = n * 512; plugin/NVMTLObjects.m:4133 returns _allocatedSize (was always 0); commit c6",
+   "status": "great"
   },
   "cpuCacheMode": {
    "evidence": "read from source: plugin/NVMTLObjects.m:4002 (model-reviewed, not tested)",
@@ -2303,9 +2303,9 @@
    "status": "great"
   },
   "concurrentDispatchThreads:threadsPerThreadgroup:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3961-3965; replay :4541 (model-reviewed, not tested)",
-   "note": "Apple dispatches exact thread count; we ceiling to threadgroups then overshoot.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:4082-4087 stores exact _threads and _exactThreads=YES; plugin/NVMTLObjects.m:4676-4678 replays via dispatchThreads:threa",
+   "status": "great"
   },
   "reset": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3988-3991 (model-reviewed, not tested)",
@@ -2524,9 +2524,9 @@
    "status": "great"
   },
   "installName": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2284 (model-reviewed, not tested)",
-   "note": "Always returns nil; Apple's MTLLibrary reports the dynamic-library install name when type is Dynamic.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:2326 returns _installName when type is Dynamic; plugin/NVMTLLibraryLoad.m:2292 sets _installName from nvmtl_mtlb_dynamic",
+   "status": "great"
   },
   "label": {
    "evidence": "read from source: plugin/NVMTLObjects.m:2535 (model-reviewed, not tested)",
@@ -2549,9 +2549,9 @@
    "status": "great"
   },
   "newFunctionWithName:constantValues:completionHandler:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2468-2473 (model-reviewed, not tested)",
-   "note": "Apple invokes the handler asynchronously; we specialize then call it on the caller thread. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:2510-2515 specializes then dispatch_async\u2019s the handler (not on the caller\u2019s stack before return); commit 994c95f / tool",
+   "status": "great"
   },
   "newFunctionWithName:constantValues:error:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:2359 (model-reviewed, not tested)",
@@ -2564,9 +2564,9 @@
    "status": "great"
   },
   "type": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2283 (model-reviewed, not tested)",
-   "note": "Always returns MTLLibraryTypeExecutable even when the MTLB file type is dynamic (byte 0x0A==2).",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:2321-2324 returns MTLLibraryTypeDynamic when MTLB magic and byte 0x0A==2, else Executable; commit 994c95f.",
+   "status": "great"
   }
  },
  "MTLParallelRenderCommandEncoder": {
@@ -2636,9 +2636,9 @@
    "status": "great"
   },
   "setStencilStoreActionOptions:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:5460-5463 (model-reviewed, not tested)",
-   "note": "Any nonzero options record MTLCommandBufferErrorInternal; Apple accepts valid stencil options.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:5639-5644 accepts MTLStoreActionOptionCustomSamplePositions and only Internal-errors unknown bits; commit c655a5f / tool",
+   "status": "great"
   }
  },
  "MTLRenderCommandEncoder": {
@@ -2818,14 +2818,14 @@
    "status": "improve"
   },
   "setFragmentAccelerationStructure:atBufferIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2993-2995 (model-reviewed, not tested)",
-   "note": "Forwards to setFragmentBuffer:; nil leaves prior binding.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:3097-3099 forwards to setFragmentBuffer:; nil now hits plugin/NVMTLObjects.m:3100-3105 nvmtl_unbind_buffer (commit 5fbbe",
+   "status": "great"
   },
   "setFragmentBuffer:offset:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2997-2998 (model-reviewed, not tested)",
-   "note": "Apple docs: nil unbinds the index; we log and return, leaving prior binding.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:3100-3105 nil clears _fbufAt and calls nvmtl_unbind_buffer; commit 5fbbe52 / tools/test_metal_nil_unbind.m (Apple docs: ",
+   "status": "great"
   },
   "setFragmentBufferOffset:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3391-3396 (model-reviewed, not tested)",
@@ -2833,9 +2833,9 @@
    "status": "great"
   },
   "setFragmentBuffers:offsets:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3400-3401 (model-reviewed, not tested)",
-   "note": "Skips nil entries (if bufs[k]); range API cannot unbind slots.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:3507-3508 loops every range index into setFragmentBuffer: (including nil); no longer skips nil entries; commit 5fbbe52.",
+   "status": "great"
   },
   "setFragmentBytes:length:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3025 (model-reviewed, not tested)",
@@ -2843,14 +2843,14 @@
    "status": "great"
   },
   "setFragmentIntersectionFunctionTable:atBufferIndex:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2348-2350 (model-reviewed, not tested)",
-   "note": "Nil table calls setFragmentBuffer:nil which does not unbind.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2369-2371 passes nil through setFragmentBuffer:nil; that path now unbinds (plugin/NVMTLObjects.m:3100-3105, commit 5",
+   "status": "great"
   },
   "setFragmentIntersectionFunctionTables:withBufferRange:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2355-2356 (model-reviewed, not tested)",
-   "note": "Range loop inherits nil-table non-unbind from single setter.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2376-2377 range-loops the single setter; nil unbind inherited from setFragmentBuffer fix (commit 5fbbe52).",
+   "status": "great"
   },
   "setFragmentSamplerState:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3037-3047 (model-reviewed, not tested)",
@@ -2858,14 +2858,14 @@
    "status": "great"
   },
   "setFragmentSamplerState:lodMinClamp:lodMaxClamp:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2677,3415-3422 (model-reviewed, not tested)",
-   "note": "Metal honors lodMaxClamp; specialization forces lod_max_clamp to 65504.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:3522-3532 binds via nvmtl_sampler_lod_clamp(ns, lo, hi) and marks _lod_override for specialization (plugin/NVMTLObjects.",
+   "status": "great"
   },
   "setFragmentSamplerStates:lodMinClamps:lodMaxClamps:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3433-3434 (model-reviewed, not tested)",
-   "note": "Delegates to LOD-clamp setter; inherits lod_max forced to 65504.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:3546-3547 delegates to the LOD-clamp single setter that now honors lodMaxClamp (commit bf7b107).",
+   "status": "great"
   },
   "setFragmentSamplerStates:withRange:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3412-3414 (model-reviewed, not tested)",
@@ -2873,24 +2873,24 @@
    "status": "great"
   },
   "setFragmentTexture:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3060-3061 (model-reviewed, not tested)",
-   "note": "Apple docs: nil unbinds the index; we log and return without clearing the slot.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:3166-3168 nil calls nvmtl_unbind_texture; commit 5fbbe52 / tools/test_metal_nil_unbind.m.",
+   "status": "great"
   },
   "setFragmentTextures:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3406-3407 (model-reviewed, not tested)",
-   "note": "Skips nil entries (if t[k]); range API cannot unbind slots.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLObjects.m:3513-3514 loops every entry into setFragmentTexture: (nil clears); commit 5fbbe52.",
+   "status": "great"
   },
   "setFragmentVisibleFunctionTable:atBufferIndex:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2322-2324 (model-reviewed, not tested)",
-   "note": "Nil table calls setFragmentBuffer:nil which does not unbind.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2343-2345 nil -> setFragmentBuffer:nil which now unbinds (plugin/NVMTLObjects.m:3100-3105, commit 5fbbe52).",
+   "status": "great"
   },
   "setFragmentVisibleFunctionTables:withBufferRange:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2326-2327 (model-reviewed, not tested)",
-   "note": "Range loop inherits nil-table non-unbind from single setter.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2347-2348 range-loops the single setter; nil unbind inherited (commit 5fbbe52).",
+   "status": "great"
   },
   "setFrontFacingWinding:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3288-3291 (model-reviewed, not tested)",
@@ -2903,9 +2903,9 @@
    "status": "great"
   },
   "setMeshBuffer:offset:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2679,2695 (model-reviewed, not tested)",
-   "note": "Forwards to setVertexBuffer:; nil leaves prior Vulkan binding.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2704-2705,2721 (NVMTL_MESH_BINDERS Mesh FWD=YES) forwards to setVertexBuffer:, whose nil path now unbinds (plugin/NV",
+   "status": "great"
   },
   "setMeshBufferOffset:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2680,2695 (model-reviewed, not tested)",
@@ -2913,9 +2913,9 @@
    "status": "great"
   },
   "setMeshBuffers:offsets:withRange:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2681-2682,2695 (model-reviewed, not tested)",
-   "note": "Range loop via setMeshBuffer:; nil entries do not unbind.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2707-2708 range-loops setMeshBuffer:; nil entries unbind via the vertex/nil fix (commit 5fbbe52).",
+   "status": "great"
   },
   "setMeshBytes:length:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2683-2684,2695 (model-reviewed, not tested)",
@@ -2928,14 +2928,14 @@
    "status": "great"
   },
   "setMeshSamplerState:lodMinClamp:lodMaxClamp:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2689-2690,2695 (model-reviewed, not tested)",
-   "note": "Forwards to vertex LOD setter; inherits lod_max forced to 65504.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2715-2716,2721 forwards to setVertexSamplerState:lodMinClamp:lodMaxClamp:, which uses nvmtl_sampler_lod_clamp (plugi",
+   "status": "great"
   },
   "setMeshSamplerStates:lodMinClamps:lodMaxClamps:withRange:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2693-2695 (model-reviewed, not tested)",
-   "note": "Loops into mesh LOD setter; inherits lod_max forced to 65504.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2719-2720 loops into the mesh LOD setter that now honors clamps (commit bf7b107).",
+   "status": "great"
   },
   "setMeshSamplerStates:withRange:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2691-2692,2695 (model-reviewed, not tested)",
@@ -2943,14 +2943,14 @@
    "status": "great"
   },
   "setMeshTexture:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2685,2695 (model-reviewed, not tested)",
-   "note": "Forwards to setVertexTexture:; nil leaves prior Vulkan binding.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2711,2721 forwards to setVertexTexture:; nil unbinds at plugin/NVMTLObjects.m:3133-3135 (commit 5fbbe52).",
+   "status": "great"
   },
   "setMeshTextures:withRange:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2686-2687,2695 (model-reviewed, not tested)",
-   "note": "Range loop via setMeshTexture:; nil entries do not unbind.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2712-2713 range-loops setMeshTexture:; nil clears via vertex texture unbind (commit 5fbbe52).",
+   "status": "great"
   },
   "setObjectBuffer:offset:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2679,2696 (model-reviewed, not tested)",
@@ -2978,14 +2978,14 @@
    "status": "great"
   },
   "setObjectSamplerState:lodMinClamp:lodMaxClamp:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2689-2690,2696 (model-reviewed, not tested)",
-   "note": "Records clamps then replay hits vertex LOD path forcing 65504.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2715-2716,2722 records @[s,lo,hi]; plugin/NVMTLLibraryLoad.m:2698-2700 replays with setVertexSamplerState:lodMinClam",
+   "status": "great"
   },
   "setObjectSamplerStates:lodMinClamps:lodMaxClamps:withRange:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2693-2696 (model-reviewed, not tested)",
-   "note": "Loops into object LOD binder; inherits forced lod_max 65504.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: plugin/NVMTLLibraryLoad.m:2719-2720,2722 loops into the object LOD binder; replay inherits the fixed vertex LOD path (commit bf7b107).",
+   "status": "great"
   },
   "setObjectSamplerStates:withRange:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2691-2692,2696 (model-reviewed, not tested)",
@@ -3108,19 +3108,19 @@
    "status": "improve"
   },
   "setVertexAccelerationStructure:atBufferIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2990-2992 (model-reviewed, not tested)",
-   "note": "Forwards to setVertexBuffer:; nil leaves prior binding.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:3093 forwards to setVertexBuffer:offset:atIndex:, and nil now clears via nvmtl_unbind_buffer (3080-3085, 4254-4269); Apple docs",
+   "status": "great"
   },
   "setVertexBuffer:offset:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2982-2983 (model-reviewed, not tested)",
-   "note": "Apple docs: nil unbinds the index; we log and return, leaving prior binding.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:3080-3085 clears _vbufAt and calls nvmtl_unbind_buffer on nil (zero scratch stand-in for Vulkan); Apple documents nil as the de",
+   "status": "great"
   },
   "setVertexBuffer:offset:attributeStride:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3381-3382 (model-reviewed, not tested)",
-   "note": "Forwards to setVertexBuffer:; nil still leaves prior binding.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:3488-3489 forwards to setVertexBuffer:offset:atIndex:, which unbinds on nil (3080-3085).",
+   "status": "great"
   },
   "setVertexBufferOffset:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3367-3372 (model-reviewed, not tested)",
@@ -3133,14 +3133,14 @@
    "status": "great"
   },
   "setVertexBuffers:offsets:attributeStrides:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3387-3388 (model-reviewed, not tested)",
-   "note": "Skips nil entries (if bufs[k]); range API cannot unbind slots.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:3492-3495 loops every range index into setVertexBuffer:... (no if bufs[k] skip); nils unbind via 3080-3085.",
+   "status": "great"
   },
   "setVertexBuffers:offsets:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3397-3398 (model-reviewed, not tested)",
-   "note": "Skips nil entries (if bufs[k]); range API cannot unbind slots.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:3504-3505 calls setVertexBuffer for each index including nil; no longer skips nil entries.",
+   "status": "great"
   },
   "setVertexBytes:length:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3024 (model-reviewed, not tested)",
@@ -3153,14 +3153,14 @@
    "status": "great"
   },
   "setVertexIntersectionFunctionTable:atBufferIndex:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2344-2346 (model-reviewed, not tested)",
-   "note": "Nil table calls setVertexBuffer:nil which does not unbind.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLLibraryLoad.m:2365-2367 passes nil table as setVertexBuffer:nil, which unbinds (NVMTLObjects.m:3080-3085).",
+   "status": "great"
   },
   "setVertexIntersectionFunctionTables:withBufferRange:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2352-2353 (model-reviewed, not tested)",
-   "note": "Range loop inherits nil-table non-unbind from single setter.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLLibraryLoad.m:2373-2374 loops to the single setter; nil tables now unbind through setVertexBuffer:nil.",
+   "status": "great"
   },
   "setVertexSamplerState:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3048-3058 (model-reviewed, not tested)",
@@ -3168,14 +3168,14 @@
    "status": "great"
   },
   "setVertexSamplerState:lodMinClamp:lodMaxClamp:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2677,3424-3431 (model-reviewed, not tested)",
-   "note": "Metal honors lodMaxClamp; specialization forces lod_max_clamp to 65504.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:3534-3544 binds nvmtl_sampler_lod_clamp(ns,lo,hi) and marks _lod_override so nvmtl_pixel_sampler_norm (2724-2729) no longer for",
+   "status": "great"
   },
   "setVertexSamplerStates:lodMinClamps:lodMaxClamps:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3436-3437 (model-reviewed, not tested)",
-   "note": "Delegates to LOD-clamp setter; inherits lod_max forced to 65504.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:3549-3550 delegates to the fixed lodMinClamp:lodMaxClamp: single setter.",
+   "status": "great"
   },
   "setVertexSamplerStates:withRange:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3409-3411 (model-reviewed, not tested)",
@@ -3183,24 +3183,24 @@
    "status": "great"
   },
   "setVertexTexture:atIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3027-3028 (model-reviewed, not tested)",
-   "note": "Apple docs: nil unbinds the index; we log and return without clearing the slot.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:3133-3135 calls nvmtl_unbind_texture on nil (null image/storage views at 4271-4276); Apple docs clear the texture argument-tabl",
+   "status": "great"
   },
   "setVertexTextures:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3403-3404 (model-reviewed, not tested)",
-   "note": "Skips nil entries (if t[k]); range API cannot unbind slots.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:3510-3511 calls setVertexTexture for every index (no if t[k] skip); nils unbind.",
+   "status": "great"
   },
   "setVertexVisibleFunctionTable:atBufferIndex:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2329-2331 (model-reviewed, not tested)",
-   "note": "Nil table calls setVertexBuffer:nil which does not unbind.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLLibraryLoad.m:2350-2352 passes nil as setVertexBuffer:nil, which now unbinds (NVMTLObjects.m:3080-3085).",
+   "status": "great"
   },
   "setVertexVisibleFunctionTables:withBufferRange:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2333-2334 (model-reviewed, not tested)",
-   "note": "Range loop inherits nil-table non-unbind from single setter.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLLibraryLoad.m:2354-2355 loops to the single setter; nil tables unbind.",
+   "status": "great"
   },
   "setViewport:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3271-3275 (model-reviewed, not tested)",
@@ -3290,14 +3290,14 @@
    "status": "great"
   },
   "functionHandleWithFunction:stage:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2303-2315 (model-reviewed, not tested)",
-   "note": "Only Vertex/Fragment keys; Mesh/Object stages yield nil. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLLibraryLoad.m:2318-2323 keys Mesh/Object stages (kNVMTLRenderMesh/Object) as well as Vertex/Fragment; Apple allows handles for those stag",
+   "status": "great"
   },
   "gpuResourceID": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2555 (model-reviewed, not tested)",
-   "note": "Returns 0 unless supportIndirectCommandBuffers; Metal returns a valid pipeline resource ID.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:2600-2601 always returns nvmtl_resid_pipe (no longer gated on supportIndirectCommandBuffers); Apple returns a valid pipeline re",
+   "status": "great"
   },
   "imageblockMemoryLengthForDimensions:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:2558 (model-reviewed, not tested)",
@@ -3335,9 +3335,9 @@
    "status": "differs"
   },
   "meshThreadExecutionWidth": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2479-2480; plugin/NVMTLObjects.m:2551 (model-reviewed, not tested)",
-   "note": "Without mesh kernel falls back to render TEW 32, not 0. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLLibraryLoad.m:2500-2501 returns 0 without a mesh kernel (mi->_k), else the compute TEW; Apple reports 0 when there is no mesh stage.",
+   "status": "great"
   },
   "newIntersectionFunctionTableWithDescriptor:stage:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2339-2340,2190-2197 (model-reviewed, not tested)",
@@ -3350,14 +3350,14 @@
    "status": "improve"
   },
   "objectThreadExecutionWidth": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2477-2478; plugin/NVMTLObjects.m:2551 (model-reviewed, not tested)",
-   "note": "Without object stage returns render TEW 32, not 0. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLLibraryLoad.m:2498-2499 returns 0 without an object stage (mi->_o); no longer falls back to render TEW 32.",
+   "status": "great"
   },
   "shaderValidation": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2559 (model-reviewed, not tested)",
-   "note": "Always MTLShaderValidationDisabled; Metal reports the pipeline's requested validation state.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLDevice.m:1402 copies descriptor.shaderValidation into ps->_shaderValidation; NVMTLObjects.m:2604 returns it (was always Disabled).",
+   "status": "great"
   },
   "supportIndirectCommandBuffers": {
    "evidence": "read from source: plugin/NVMTLObjects.m:2554 (model-reviewed, not tested)",
@@ -3372,14 +3372,14 @@
  },
  "MTLResidencySet": {
   "addAllocation:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:5164 (model-reviewed, not tested)",
-   "note": "Apple no-ops if already present; we append duplicates into an NSMutableArray. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:5341 adds only if !containsObject; Apple residency sets ignore duplicate allocations.",
+   "status": "great"
   },
   "addAllocations:count:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:5165 (model-reviewed, not tested)",
-   "note": "Same as addAllocation: duplicates allowed; Apple residency sets are unique. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:5342-5344 skips entries already in _allocs; matches Apple uniqueness.",
+   "status": "great"
   },
   "allAllocations": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5170 (model-reviewed, not tested)",
@@ -3444,9 +3444,9 @@
  },
  "MTLResource": {
   "allocatedSize": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4010,836,1108; plugin/NVMTLLibraryLoad.m:2127,2185 (model-reviewed, not tested)",
-   "note": "ICB always 0; Buffer/Texture/AS/tables report real sizes.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLIndirectCommandBuffer allocatedSize returns _allocatedSize (NVMTLObjects.m:4133); Device.m:1917-1918 sets n*512. Buffer/Texture/AS paths ",
+   "status": "great"
   },
   "cpuCacheMode": {
    "evidence": "read from source: plugin/NVMTLObjects.m:838,1323,4002; plugin/NVMTLLibraryLoad.m:2120,2178 (model-reviewed, not tested)",
@@ -3580,9 +3580,9 @@
    "status": "great"
   },
   "allowGPUOptimizedContents": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:1345; create never stores flag plugin/NVMTLDevice.m:756-799 (model-reviewed, not tested)",
-   "note": "Always YES; Apple mirrors MTLTextureDescriptor.allowGPUOptimizedContents, which may be NO.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:1355 returns !_gpuOptimizedOff; creation paths set _gpuOptimizedOff=!d.allowGPUOptimizedContents (e.g. Device.m:761). Apple mir",
+   "status": "great"
   },
   "arrayLength": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1313 (model-reviewed, not tested)",
@@ -3660,9 +3660,9 @@
    "status": "great"
   },
   "iosurface": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:1317 (model-reviewed, not tested)",
-   "note": "Returns NULL when _shareable even if _surf exists; Apple returns the creating IOSurface.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:1327 returns _surf unconditionally (no longer NULL when _shareable); Apple returns the creating IOSurface when present.",
+   "status": "great"
   },
   "iosurfacePlane": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1318 (model-reviewed, not tested)",
@@ -3770,9 +3770,9 @@
    "status": "great"
   },
   "rootResource": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:1309,1484-1487 (model-reviewed, not tested)",
-   "note": "Apple storage owner vs ours: returns immediate _viewParent, not _parent/buffer root. [second review]",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:1313-1318 returns storage root (_parent texture or _backBuf), not immediate _viewParent; Apple deprecated docs: resource that o",
+   "status": "great"
   },
   "sampleCount": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1314 (model-reviewed, not tested)",
@@ -3827,9 +3827,9 @@
    "status": "great"
   },
   "arrayLength": {
-   "evidence": "read from source: plugin/NVMTLGL.m:412 (model-reviewed, not tested)",
-   "note": "NVMTLGLTexBinding returns hardcoded 1, so array textures report the wrong length.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLGLTexBinding returns _arrayLength?:1 (NVMTLGL.m:412) filled from air.array_length/size (500-501); NVMTLTextureArgument uses reflection co",
+   "status": "great"
   },
   "index": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1927 (model-reviewed, not tested)",
@@ -3842,9 +3842,9 @@
    "status": "great"
   },
   "isDepthTexture": {
-   "evidence": "read from source: plugin/NVMTLGL.m:410 (model-reviewed, not tested)",
-   "note": "Always NO: NVMTLTextureArgument never sets _depth and NVMTLGLTexBinding returns NO.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:2136 sets a->_depth from type name/shape; 1951 returns it. NVMTLGL.m:486/410 sets and returns _depth for depth* AIR types.",
+   "status": "great"
   },
   "isUsed": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1929; plugin/NVMTLGL.m:404 (model-reviewed, not tested)",
@@ -3857,9 +3857,9 @@
    "status": "great"
   },
   "textureDataType": {
-   "evidence": "read from source: plugin/NVMTLGL.m:409, plugin/NVMTLObjects.m:2100 (model-reviewed, not tested)",
-   "note": "Constants: NVMTLGLTexBinding returns None, NVMTLTextureArgument hardcodes Float.",
-   "status": "differs"
+   "evidence": "fixed on branch purple/integrated; model-reviewed, not individually tested (the branch tests under tools/test_metal_*.m pass on the RTX 2060 Super VM)",
+   "note": "Matches Apple after the purple fixes: read from source: NVMTLObjects.m:2003-2120 parses AIR element type via nvmtl_tex_datatype_for_air_name (not hardcoded Float); NVMTLGL.m:487-499 sets _tdtype fro",
+   "status": "great"
   },
   "textureType": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1937 (model-reviewed, not tested)",
@@ -3867,9 +3867,9 @@
    "status": "great"
   },
   "type": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:1925; plugin/NVMTLGL.m:401 (model-reviewed, not tested)",
-   "note": "Objects returns MTLArgumentType; GL returns MTLBindingTypeTexture. [second review]",
-   "status": "differs"
+   "evidence": "re-read from source; model-reviewed, not tested",
+   "note": "The purple rating was wrong: read from source: NVMTLTextureArgument overrides type to MTLBindingTypeTexture (NVMTLObjects.m:1962); NVMTLGLTexBinding returns MTLBindingTypeTexture (NVMTLGL.m",
+   "status": "great"
   }
  },
  "MTLVisibleFunctionTable": {
