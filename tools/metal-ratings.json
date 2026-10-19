@@ -1,0 +1,4 @@
+{
+  "_comment": "Hand-kept ratings that override the generated colors. status: great (green), improve (yellow), slow (red), differs (purple). Key by protocol, then selector, or \"*\" for the whole protocol. A rating on a method the dump says is missing is ignored. Add \"note\" and \"evidence\" (a test, log or commit).",
+  "MTLDevice": {}
+}

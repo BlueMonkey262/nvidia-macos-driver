@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Metal coverage map</title>
+<style>
+:root{--bg:#0f1218;--fg:#e6e9ef;--mut:#8b93a3;--line:#0f1218;--missing:#6b7280;--slow:#dc2626;--improve:#eab308;--great:#22a559;--differs:#9333ea;--unrated:#3a4252}
+@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#f6f7f9;--fg:#161a22;--mut:#5b6474;--line:#f6f7f9;--missing:#9aa1ad;--unrated:#c6ccd8}}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif}
+main{padding:16px;max-width:1400px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 12px;padding:0;list-style:none}
+.legend li{display:flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:2px;display:inline-block}
+#map{position:relative;width:100%;height:70vh;min-height:420px}
+.g{position:absolute;box-sizing:border-box;border:2px solid var(--line)}
+.g>.t{position:absolute;left:3px;top:1px;font-size:11px;font-weight:600;color:#fff;text-shadow:0 0 3px #000;pointer-events:none;white-space:nowrap;overflow:hidden;max-width:calc(100% - 6px);z-index:2}
+.c{position:absolute;box-sizing:border-box;border:1px solid var(--line)}
+.missing{background:var(--missing)}.slow{background:var(--slow)}.improve{background:var(--improve)}.great{background:var(--great)}.differs{background:var(--differs)}
+.unrated{background:repeating-linear-gradient(45deg,var(--unrated) 0 3px,transparent 3px 6px),var(--bg)}
+#tip{position:fixed;display:none;background:#000d;color:#fff;padding:6px 8px;border-radius:4px;font-size:12px;max-width:420px;pointer-events:none;z-index:9;word-break:break-all}
+</style></head><body><main>
+<h1>Metal coverage map</h1>
+<p class="sub" id="sub"></p>
+<ul class="legend" id="legend"></ul>
+<div id="map"></div><div id="tip"></div>
+<p class="sub">One cell per method of each public Metal protocol, grouped by protocol. The whole API counts, including features made for Apple silicon. “Implemented” means a driver class answers the selector, not that it works.</p>
+</main>
+<script>
+const D=/*DATA*/;
+const NAMES={missing:"Not implemented",slow:"Implemented, very slow",improve:"Needs improvement, fine for now",great:"Works great",differs:"Implemented, differs from Apple's result",unrated:"Implemented, not yet rated"};
+document.getElementById("sub").textContent=D.total+" methods in "+D.groups.length+" protocols"+(D.device?" - "+D.device:"");
+document.getElementById("legend").innerHTML=Object.keys(NAMES).map(k=>`<li><span class="sw ${k}"></span>${NAMES[k]} (${D.totals[k]})</li>`).join("");
+// squarified treemap
+function layout(items,x,y,w,h){const out=[];let rest=items.slice();let total=rest.reduce((a,b)=>a+b.v,0);
+ while(rest.length){const horiz=w>=h,side=horiz?h:w;let row=[],sum=0,best=Infinity;
+  for(let i=0;i<rest.length;i++){const r=rest.slice(0,i+1),s=r.reduce((a,b)=>a+b.v,0);const th=s/total*(horiz?w:h);
+   const ar=Math.max(...r.map(it=>{const l=it.v/s*side;return Math.max(th/l,l/th)}));if(ar<=best){best=ar;row=r;sum=s}else break}
+  const th=sum/total*(horiz?w:h);let o=0;
+  for(const it of row){const l=it.v/sum*side;out.push(horiz?{it,x,y:y+o,w:th,h:l}:{it,x:x+o,y,w:l,h:th});o+=l}
+  rest=rest.slice(row.length);total-=sum;if(horiz){x+=th;w-=th}else{y+=th;h-=th}}
+ return out}
+const map=document.getElementById("map"),tip=document.getElementById("tip");
+function draw(){map.innerHTML="";const W=map.clientWidth,H=map.clientHeight;
+ const gs=D.groups.map(g=>({g,v:g.cells.length})).sort((a,b)=>b.v-a.v);
+ for(const r of layout(gs,0,0,W,H)){const g=r.it.g,e=document.createElement("div");e.className="g";
+  Object.assign(e.style,{left:r.x+"px",top:r.y+"px",width:r.w+"px",height:r.h+"px"});
+  const pad=14,iw=r.w-4,ih=r.h-4-(r.h>30?pad:0);
+  const cells=g.cells.map(c=>({c,v:1}));
+  if(r.h>30&&r.w>40){const t=document.createElement("div");t.className="t";t.textContent=g.p.replace(/^MTL/,"");e.appendChild(t)}
+  for(const q of layout(cells,0,0,iw,ih)){const d=document.createElement("div");d.className="c "+q.it.c.st;
+   Object.assign(d.style,{left:2+q.x+"px",top:2+(r.h>30?pad:0)+q.y+"px",width:q.w+"px",height:q.h+"px"});
+   d.onmousemove=ev=>{const c=q.it.c;tip.style.display="block";tip.style.left=Math.min(ev.clientX+12,innerWidth-440)+"px";tip.style.top=ev.clientY+14+"px";
+    tip.textContent=g.p+" "+c.s+"\n"+NAMES[c.st]+(c.req?"":" (optional)")+(c.n?"\n"+c.n:"")+(c.e?"\nevidence: "+c.e:"");tip.style.whiteSpace="pre-wrap"};
+   d.onmouseleave=()=>tip.style.display="none";e.appendChild(d)}
+  map.appendChild(e)}}
+draw();addEventListener("resize",draw);
+</script></body></html>
