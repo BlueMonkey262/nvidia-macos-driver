@@ -13,6 +13,10 @@ The whole API counts, including features made for Apple silicon.
 | purple | implemented but does not return what Apple's implementation returns |
 | blue | implemented, not yet rated |
 
+**How trustworthy are the colors?** Today most ratings come from a model reading the source (every entry says
+"model-reviewed, not tested"). Green means "the code looks complete", not "tested"; red needs a named mechanism, not a
+measurement. A test or measurement that overwrites an entry with its own evidence is worth more than the review.
+
 A color other than gray, teal and blue only comes from `tools/metal-ratings.json` (a rating of `stub` there draws gray), with a note and the evidence (a test,
 a measurement or a source line). "Implemented" means a driver class answers the selector; it says nothing about whether
 it works.
