@@ -1109,6 +1109,13 @@ static int memtype(uint32_t bits, VkMemoryPropertyFlags want)
     return -1;
 }
 
+static uint64_t g_own_maps, g_own_map_size[4];
+static void nvmtl_own_map_census(const char *what)
+{
+    nvlog("vk: own CPU maps (%s): %llu made, by size <=4 MiB %llu, <=16 MiB %llu, <=64 MiB %llu, larger %llu",
+          what, (unsigned long long)g_own_maps, (unsigned long long)g_own_map_size[0], (unsigned long long)g_own_map_size[1],
+          (unsigned long long)g_own_map_size[2], (unsigned long long)g_own_map_size[3]);
+}
 #define NVMTL_POOL_BLOCK (32u << 20)
 #define NVMTL_POOL_MAX   (4u << 20)
 #define NVMTL_POOL_KEEP  2
@@ -1367,9 +1374,13 @@ static int nvmtl_vk_buffer_create_body(size_t size, int host_visible, nvk_buffer
     if (!host_visible) nvmtl_vk_budget_charge(mr.size);
     VKCK(pvkBindBufferMemory(g_dev, out->buf, out->mem, 0), "vkBindBufferMemory");
     if (host_visible) { VkResult mr_ = pvkMapMemory(g_dev, out->mem, 0, VK_WHOLE_SIZE, 0, &out->map); if (mr_ != VK_SUCCESS) {
-        nvlog("vk: vkMapMemory -> %d with %llu buffers live (%llu made, %llu gone), %zu bytes allocated, memory type %d", mr_,
-              (unsigned long long)(g_buf_made - g_buf_gone), (unsigned long long)g_buf_made, (unsigned long long)g_buf_gone, g_alloc_bytes, mt);
-        return -1; } }
+        nvlog("vk: vkMapMemory -> %d for a %llu byte buffer with %llu buffers live (%llu made, %llu gone), %zu bytes allocated, memory type %d", mr_,
+              (unsigned long long)mr.size, (unsigned long long)(g_buf_made - g_buf_gone), (unsigned long long)g_buf_made, (unsigned long long)g_buf_gone, g_alloc_bytes, mt);
+        nvmtl_own_map_census("failed");
+        return -1; }
+        // Each map of its own (not pooled) is one kernel client; the per-process cap is 4096.
+        g_own_map_size[mr.size <= (4u << 20) ? 0 : mr.size <= (16u << 20) ? 1 : mr.size <= (64u << 20) ? 2 : 3]++;
+        if ((++g_own_maps & 0x1FF) == 0) nvmtl_own_map_census("running"); }
     g_alloc_bytes += mr.size;
     g_buf_made++;
     if ((g_buf_made & 0xFFF) == 0) nvlog("buffer census: %llu made, %llu gone, %llu live, %zu bytes allocated; pool %llu blocks, %llu pooled live, %llu bytes in ranges",
