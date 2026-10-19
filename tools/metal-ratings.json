@@ -1124,99 +1124,604 @@
   }
  },
  "MTLDevice": {
-  "architecture": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:2011-2034 (model-reviewed)",
-   "note": "Fabricates MTLArchitecture by writing a private _name ivar with an 'nvk_\u2026' slug, or returns nil if that class/ivar is missing.",
+  "accelerationStructureSizesWithDescriptor:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1794-1803; plugin/NVMTLObjects.m:5470-5514 (model-reviewed, not tested)",
+   "note": "VK sizes for triangle/box/instance; motion/curves geometries dropped.",
    "status": "improve"
   },
+  "architecture": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:2011-2034 (model-reviewed, not tested)",
+   "note": "Fakes MTLArchitecture._name as nvk_ slug; Apple documents real GPU architecture names.",
+   "status": "differs"
+  },
+  "areBarycentricCoordsSupported": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1662 (model-reviewed, not tested)",
+   "note": "Constant YES; barycentric support is advertised for this Mac2-like device.",
+   "status": "great"
+  },
+  "areProgrammableSamplePositionsSupported": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1989 (model-reviewed, not tested)",
+   "note": "Returns NVK sample-positions backend availability.",
+   "status": "great"
+  },
+  "areRasterOrderGroupsSupported": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1988 (model-reviewed, not tested)",
+   "note": "Honest NO; raster-order groups are Apple TBDR, not this discrete path.",
+   "status": "great"
+  },
+  "argumentBuffersSupport": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1869 (model-reviewed, not tested)",
+   "note": "Reports Tier2; bindless argument-buffer path exists in nvmtl_vk.",
+   "status": "great"
+  },
+  "convertSparsePixelRegions:toTileRegions:withTileSize:alignmentMode:numRegions:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; no plugin body (model-reviewed, not tested)",
+   "note": "No NVMTL override; runtime IMP is Apple _MTLDevice region math. [low confidence]",
+   "status": "great"
+  },
+  "convertSparseTileRegions:toPixelRegions:withTileSize:numRegions:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; no plugin body (model-reviewed, not tested)",
+   "note": "No NVMTL override; runtime IMP is Apple _MTLDevice region math. [low confidence]",
+   "status": "great"
+  },
+  "counterSets": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1834 (model-reviewed, not tested)",
+   "note": "Returns the timestamp counter-set singleton.",
+   "status": "great"
+  },
+  "currentAllocatedSize": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1947 (model-reviewed, not tested)",
+   "note": "Reads nvmtl_vk_allocated_bytes().",
+   "status": "great"
+  },
+  "getDefaultSamplePositions:count:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1990-1994 (model-reviewed, not tested)",
+   "note": "Fills positions from nvmtl_vk_sample_positions_default.",
+   "status": "great"
+  },
+  "hasUnifiedMemory": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1953 (model-reviewed, not tested)",
+   "note": "NO for this discrete GPU path.",
+   "status": "great"
+  },
+  "heapAccelerationStructureSizeAndAlignWithDescriptor:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1823-1826 (model-reviewed, not tested)",
+   "note": "Uses sizes helper; inherits dropped motion/curves geometries.",
+   "status": "improve"
+  },
+  "heapAccelerationStructureSizeAndAlignWithSize:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1816-1821 (model-reviewed, not tested)",
+   "note": "VK buffer size/align with 256-byte floor.",
+   "status": "great"
+  },
+  "heapBufferSizeAndAlignWithLength:options:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1894-1897 (model-reviewed, not tested)",
+   "note": "Ignores options; sizes from length via nvmtl_vk_buffer_size_align only.",
+   "status": "improve"
+  },
+  "heapTextureSizeAndAlignWithDescriptor:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1899-1907 (model-reviewed, not tested)",
+   "note": "VK image size/align from descriptor type/format/mips/layers.",
+   "status": "great"
+  },
+  "isDepth24Stencil8PixelFormatSupported": {
+   "evidence": "read from source: plugin/NVMTLDevice_contract.m:15; plugin/NVMTLDevice.m:615 (model-reviewed, not tested)",
+   "note": "YES and depth path maps MTLPixelFormatDepth24Unorm_Stencil8.",
+   "status": "great"
+  },
+  "isHeadless": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; plugin/NVMTLDevice.m:144 (model-reviewed, not tested)",
+   "note": "No NVMTL override; MTLIOAccelDevice accelerator property. [low confidence]",
+   "status": "great"
+  },
+  "isLowPower": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; plugin/NVMTLDevice.m:144 (model-reviewed, not tested)",
+   "note": "No NVMTL override; MTLIOAccelDevice accelerator property. [low confidence]",
+   "status": "great"
+  },
+  "isRemovable": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; plugin/NVMTLDevice.m:144 (model-reviewed, not tested)",
+   "note": "No NVMTL override; MTLIOAccelDevice accelerator property. [low confidence]",
+   "status": "great"
+  },
+  "location": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; plugin/NVMTLDevice.m:144 (model-reviewed, not tested)",
+   "note": "No NVMTL override; MTLIOAccelDevice accelerator location. [low confidence]",
+   "status": "great"
+  },
+  "locationNumber": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; plugin/NVMTLDevice.m:144 (model-reviewed, not tested)",
+   "note": "No NVMTL override; MTLIOAccelDevice accelerator locationNumber. [low confidence]",
+   "status": "great"
+  },
+  "maxArgumentBufferSamplerCount": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice.m:519-526 (model-reviewed, not tested)",
+   "note": "No NVMTL override; Apple _MTLDevice limit after initLimits. [low confidence]",
+   "status": "great"
+  },
   "maxBufferLength": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1965-1967 (model-reviewed)",
-   "note": "When NVK pubcaps are unavailable, returns constant 0 (logged UNKNOWN) instead of a device limit.",
+   "evidence": "read from source: plugin/NVMTLDevice.m:1965-1973 (model-reviewed, not tested)",
+   "note": "From pubcaps and working-set; returns 0 if NVK limits unavailable.",
+   "status": "improve"
+  },
+  "maxThreadgroupMemoryLength": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:2038-2039 (model-reviewed, not tested)",
+   "note": "From nvmtl_vk_limits compute shared memory.",
+   "status": "great"
+  },
+  "maxThreadsPerThreadgroup": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:2040 (model-reviewed, not tested)",
+   "note": "From nvmtl_vk_limits workgroup sizes.",
+   "status": "great"
+  },
+  "maxTransferRate": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; plugin/NVMTLDevice.m:144 (model-reviewed, not tested)",
+   "note": "No NVMTL override; MTLIOAccelDevice accelerator property. [low confidence]",
+   "status": "great"
+  },
+  "maximumConcurrentCompilationTaskCount": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice.m:1997-1999 (model-reviewed, not tested)",
+   "note": "Inherited _MTLDevice count; our translator path stays serialised anyway. [low confidence]",
    "status": "improve"
   },
   "minimumLinearTextureAlignmentForPixelFormat:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1976-1983 (model-reviewed)",
-   "note": "Casts away the pixel format and returns max(NVK minTexelBufferOffsetAlignment, 256), not a format-specific Metal alignment.",
-   "status": "improve"
+   "evidence": "read from source: plugin/NVMTLDevice.m:1976-1983 (model-reviewed, not tested)",
+   "note": "Casts away pixelFormat; returns max(NVK align, 256) only.",
+   "status": "stub"
   },
   "minimumTextureBufferAlignmentForPixelFormat:": {
-   "evidence": "read from source: plugin/NVMTLDevice_contract.m:17 (model-reviewed)",
-   "note": "Ignores the pixel format and always returns 256.",
-   "status": "improve"
+   "evidence": "read from source: plugin/NVMTLDevice_contract.m:17 (model-reviewed, not tested)",
+   "note": "Ignores pixel format; always returns 256.",
+   "status": "stub"
   },
   "name": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:559-564 (model-reviewed)",
-   "note": "Returns a branded string with '(NVMTL over \u2026)' instead of Apple's plain GPU marketing name for MTLDevice.name.",
+   "evidence": "read from source: plugin/NVMTLDevice.m:558-564 (model-reviewed, not tested)",
+   "note": "Branded '(NVMTL over \u2026)'; Apple documents MTLDevice.name as marketing GPU name.",
    "status": "differs"
   },
+  "newAccelerationStructureWithDescriptor:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1812-1814 (model-reviewed, not tested)",
+   "note": "Allocates AS sized from descriptor via sizes helper.",
+   "status": "great"
+  },
+  "newAccelerationStructureWithSize:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1805-1810 (model-reviewed, not tested)",
+   "note": "Allocates private VK buffer when RT is available.",
+   "status": "great"
+  },
+  "newArgumentEncoderWithArguments:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1922-1945; plugin/NVMTLObjects.m:2174-2180 (model-reviewed, not tested)",
+   "note": "Builds fields by type; encodedLength always ends fields at +8 bytes.",
+   "status": "differs"
+  },
+  "newArgumentEncoderWithBufferBinding:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice.m:1922 (model-reviewed, not tested)",
+   "note": "Inherited _MTLDevice; may yield Apple encoder vs our Arguments path. [low confidence]",
+   "status": "improve"
+  },
   "newBinaryArchiveWithDescriptor:error:": {
-   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2420-2434 (model-reviewed)",
-   "note": "Builds a key-only NVMTLBinaryArchive (no GPU binaries); foreign Apple archive URLs open empty so every lookup misses.",
+   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2420-2434 (model-reviewed, not tested)",
+   "note": "Key-only NVMTL archive; foreign Apple archive URLs open empty.",
    "status": "improve"
   },
   "newBufferWithBytes:length:options:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:598-607 (model-reviewed)",
-   "note": "Private storage is remapped to Shared for the copy then re-tagged Private; Apple documents Private as invalid for this API (typically rejects/raises).",
+   "evidence": "read from source: plugin/NVMTLDevice.m:598-607 (model-reviewed, not tested)",
+   "note": "Remaps Private\u2192Shared then retags; Apple documents Private invalid for this API.",
    "status": "differs"
   },
   "newBufferWithBytesNoCopy:length:options:deallocator:": {
-   "evidence": "read from source: plugin/NVMTLDevice_contract.m:23-25 (model-reviewed)",
-   "note": "Private/Memoryless returns nil; the source notes a real driver aborts on Private with a WithBytes-style API.",
+   "evidence": "read from source: plugin/NVMTLDevice_contract.m:19-69 (model-reviewed, not tested)",
+   "note": "Private/Memoryless returns nil; source notes a real driver aborts on Private.",
    "status": "differs"
   },
+  "newBufferWithLength:options:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:577-596 (model-reviewed, not tested)",
+   "note": "Creates shared/private/managed VK buffers with zero-fill.",
+   "status": "great"
+  },
+  "newCommandQueue": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:566 (model-reviewed, not tested)",
+   "note": "Delegates to newCommandQueueWithMaxCommandBufferCount:64.",
+   "status": "great"
+  },
   "newCommandQueueWithDescriptor:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:2002-2008 (model-reviewed)",
-   "note": "Ignores descriptor.logState (shader logging not implemented) and only honours maxCommandBufferCount.",
+   "evidence": "read from source: plugin/NVMTLDevice.m:2002-2008 (model-reviewed, not tested)",
+   "note": "Honours maxCommandBufferCount; ignores descriptor.logState.",
    "status": "improve"
   },
+  "newCommandQueueWithMaxCommandBufferCount:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:567-573 (model-reviewed, not tested)",
+   "note": "Creates NVMTLCommandQueue with an NVK command pool.",
+   "status": "great"
+  },
+  "newComputePipelineStateWithDescriptor:options:completionHandler:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1633-1640 (model-reviewed, not tested)",
+   "note": "Async compile-queue wrapper of options:reflection path.",
+   "status": "great"
+  },
+  "newComputePipelineStateWithDescriptor:options:reflection:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1615-1631 (model-reviewed, not tested)",
+   "note": "Links and builds; only FailOnBinaryArchiveMiss among MTLPipelineOption.",
+   "status": "improve"
+  },
+  "newComputePipelineStateWithFunction:completionHandler:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1577-1581 (model-reviewed, not tested)",
+   "note": "Async compile-queue delivery over sync create.",
+   "status": "great"
+  },
+  "newComputePipelineStateWithFunction:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1755-1790 (model-reviewed, not tested)",
+   "note": "Builds VK or SASS compute pipeline from kernel SPIR-V.",
+   "status": "great"
+  },
   "newComputePipelineStateWithFunction:options:completionHandler:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1583-1589 (model-reviewed)",
-   "note": "Async wrapper of the options:reflection path that likewise ignores MTLPipelineOption.",
+   "evidence": "read from source: plugin/NVMTLDevice.m:1583-1589 (model-reviewed, not tested)",
+   "note": "Async wrapper of options path that still ignores MTLPipelineOption.",
    "status": "improve"
   },
   "newComputePipelineStateWithFunction:options:reflection:error:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1571-1575 (model-reviewed)",
-   "note": "Ignores MTLPipelineOption entirely (including FailOnBinaryArchiveMiss) and only wraps newComputePipelineStateWithFunction:error:.",
+   "evidence": "read from source: plugin/NVMTLDevice.m:1571-1575 (model-reviewed, not tested)",
+   "note": "Ignores MTLPipelineOption entirely; wraps function:error: only.",
+   "status": "improve"
+  },
+  "newCounterSampleBufferWithDescriptor:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1835-1852 (model-reviewed, not tested)",
+   "note": "Validates timestamp set and sampleCount; creates VK query pool.",
+   "status": "great"
+  },
+  "newDefaultLibrary": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1230-1233 (model-reviewed, not tested)",
+   "note": "Loads main-bundle default.metallib via newLibraryWithURL.",
+   "status": "great"
+  },
+  "newDefaultLibraryWithBundle:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1235-1238 (model-reviewed, not tested)",
+   "note": "Loads bundle default.metallib via newLibraryWithURL.",
+   "status": "great"
+  },
+  "newDepthStencilStateWithDescriptor:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1699-1715 (model-reviewed, not tested)",
+   "note": "Copies depth/stencil compare ops and masks into NVMTL state.",
+   "status": "great"
+  },
+  "newDynamicLibrary:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1658; plugin/NVMTLLibraryLoad.m:2263-2278 (model-reviewed, not tested)",
+   "note": "Wraps library via nvmtl_new_dylib.",
+   "status": "great"
+  },
+  "newDynamicLibraryWithURL:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1659; plugin/NVMTLLibraryLoad.m:2280-2282 (model-reviewed, not tested)",
+   "note": "Loads URL then nvmtl_new_dylib.",
+   "status": "great"
+  },
+  "newEvent": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1867; plugin/NVMTLObjects.m:5174-5180 (model-reviewed, not tested)",
+   "note": "Creates NVMTLEvent with condition/value signaling.",
+   "status": "great"
+  },
+  "newFence": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1919-1920 (model-reviewed, not tested)",
+   "note": "Creates NVMTLFence bound to this device.",
+   "status": "great"
+  },
+  "newHeapWithDescriptor:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1879-1892 (model-reviewed, not tested)",
+   "note": "Placement VK heap or automatic heap backing from descriptor.",
+   "status": "great"
+  },
+  "newIOCommandQueueWithDescriptor:error:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; no plugin body (model-reviewed, not tested)",
+   "note": "Inherited MTLIOAccelDevice IO queue; no NVMTL IO/NVK integration in plugin. [low confidence]",
+   "status": "improve"
+  },
+  "newIOFileHandleWithURL:compressionMethod:error:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; no plugin body (model-reviewed, not tested)",
+   "note": "Inherited MTLIOAccelDevice IO handle; no NVMTL override in plugin. [low confidence]",
+   "status": "improve"
+  },
+  "newIOFileHandleWithURL:error:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; no plugin body (model-reviewed, not tested)",
+   "note": "Inherited MTLIOAccelDevice IO handle; no NVMTL override in plugin. [low confidence]",
+   "status": "improve"
+  },
+  "newIOHandleWithURL:compressionMethod:error:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; no plugin body (model-reviewed, not tested)",
+   "note": "Inherited MTLIOAccelDevice IO handle; no NVMTL override in plugin. [low confidence]",
+   "status": "improve"
+  },
+  "newIOHandleWithURL:error:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; no plugin body (model-reviewed, not tested)",
+   "note": "Inherited MTLIOAccelDevice IO handle; no NVMTL override in plugin. [low confidence]",
    "status": "improve"
   },
   "newIndirectCommandBufferWithDescriptor:maxCommandCount:options:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1909-1917 (model-reviewed)",
-   "note": "Never reads the MTLIndirectCommandBufferDescriptor (commandTypes, inheritBuffers, bind counts); only allocates N empty command slots.",
+   "evidence": "read from source: plugin/NVMTLDevice.m:1909-1917 (model-reviewed, not tested)",
+   "note": "Allocates N empty command slots; never reads descriptor commandTypes.",
+   "status": "improve"
+  },
+  "newLibraryWithData:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1170-1180 (model-reviewed, not tested)",
+   "note": "Translates metallib bytes into SPIR-V NVMTLLibrary.",
+   "status": "great"
+  },
+  "newLibraryWithFile:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1278-1279 (model-reviewed, not tested)",
+   "note": "Reads path and translates metallib.",
+   "status": "great"
+  },
+  "newLibraryWithSource:options:completionHandler:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1215-1217 (model-reviewed, not tested)",
+   "note": "Compiles synchronously on the caller then async-delivers; Apple API is async.",
+   "status": "differs"
+  },
+  "newLibraryWithSource:options:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1208-1213 (model-reviewed, not tested)",
+   "note": "Super-compiles then bridges Apple metallib to SPIR-V.",
+   "status": "great"
+  },
+  "newLibraryWithStitchedDescriptor:completionHandler:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1156-1159 (model-reviewed, not tested)",
+   "note": "Stitches/bridges on the caller then async-delivers; Apple API is async.",
+   "status": "differs"
+  },
+  "newLibraryWithStitchedDescriptor:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1028-1090 (model-reviewed, not tested)",
+   "note": "Bridges Apple stitcher then translates resulting metallib.",
+   "status": "great"
+  },
+  "newLibraryWithURL:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1240-1259 (model-reviewed, not tested)",
+   "note": "Reads URL and translates metallib with cache key.",
+   "status": "great"
+  },
+  "newLogStateWithDescriptor:error:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice.m:2004-2006 (model-reviewed, not tested)",
+   "note": "Inherited _MTLDevice log state; our queues ignore descriptor.logState. [low confidence]",
+   "status": "improve"
+  },
+  "newRasterizationRateMapWithDescriptor:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; no plugin body (model-reviewed, not tested)",
+   "note": "Inherited _MTLDevice; no NVMTL rate-map path; likely nil/unusable here. [low confidence]",
+   "status": "improve"
+  },
+  "newRenderPipelineStateWithDescriptor:completionHandler:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1555-1560 (model-reviewed, not tested)",
+   "note": "Async pipeline compile-queue over sync create.",
+   "status": "great"
+  },
+  "newRenderPipelineStateWithDescriptor:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1374-1509 (model-reviewed, not tested)",
+   "note": "Full VK graphics pipeline from SPIR-V and descriptor.",
+   "status": "great"
+  },
+  "newRenderPipelineStateWithDescriptor:options:completionHandler:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1562-1569 (model-reviewed, not tested)",
+   "note": "Async compile-queue over options:reflection path.",
+   "status": "great"
+  },
+  "newRenderPipelineStateWithDescriptor:options:reflection:error:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1511-1521 (model-reviewed, not tested)",
+   "note": "Builds PSO; only FailOnBinaryArchiveMiss among MTLPipelineOption.",
+   "status": "improve"
+  },
+  "newRenderPipelineStateWithMeshDescriptor:options:completionHandler:": {
+   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2639-2643 (model-reviewed, not tested)",
+   "note": "Runs sync on caller then async-delivers; Apple mesh completion is async.",
+   "status": "differs"
+  },
+  "newRenderPipelineStateWithMeshDescriptor:options:reflection:error:": {
+   "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2589-2637 (model-reviewed, not tested)",
+   "note": "Real mesh\u2192compute lower; MTLPipelineOption unused; not HW mesh.",
+   "status": "improve"
+  },
+  "newRenderPipelineStateWithTileDescriptor:options:completionHandler:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLLibraryLoad.m:2395-2396 (model-reviewed, not tested)",
+   "note": "Inherited _MTLDevice tile PSO; our tile encoder binds/dispatches are empty. [low confidence]",
+   "status": "improve"
+  },
+  "newRenderPipelineStateWithTileDescriptor:options:reflection:error:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLLibraryLoad.m:2395-2396 (model-reviewed, not tested)",
+   "note": "Inherited _MTLDevice tile PSO; binary archives refuse tile functions. [low confidence]",
    "status": "improve"
   },
   "newResidencySetWithDescriptor:error:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1862-1865; plugin/NVMTLObjects.m:5157-5172 (model-reviewed)",
-   "note": "Returns an object whose requestResidency/commit/endResidency are empty no-ops (residency treated as always implicit).",
-   "status": "improve"
+   "evidence": "read from source: plugin/NVMTLDevice.m:1862-1865; plugin/NVMTLObjects.m:5162-5172 (model-reviewed, not tested)",
+   "note": "Returns object whose requestResidency/commit/endResidency are empty no-ops.",
+   "status": "stub"
   },
   "newSamplerStateWithDescriptor:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1735-1749 (model-reviewed)",
-   "note": "Non-normalized (and NVMTL_NO_SAMPLER_CONTRACT) paths collapse to nvmtl_vk_sampler_create(linear, s-repeat-only), ignoring other filter/address/compare fields for the VK sampler.",
+   "evidence": "read from source: plugin/NVMTLDevice.m:1717-1753 (model-reviewed, not tested)",
+   "note": "Full desc when normalized; else collapses to linear/s-repeat VK sampler.",
    "status": "improve"
+  },
+  "newSharedEvent": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1868; plugin/NVMTLObjects.m:5182-5193 (model-reviewed, not tested)",
+   "note": "Creates in-process NVMTLSharedEvent with notify support.",
+   "status": "great"
   },
   "newSharedEventWithHandle:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1694-1696 (model-reviewed)",
-   "note": "Always returns nil and logs that cross-process shared events are not built.",
+   "evidence": "read from source: plugin/NVMTLDevice.m:1694-1696 (model-reviewed, not tested)",
+   "note": "Always returns nil; cross-process shared events not built.",
+   "status": "stub"
+  },
+  "newSharedTextureWithDescriptor:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice.m:1664-1692 (model-reviewed, not tested)",
+   "note": "Inherited _MTLDevice shareable texture; may not be NVMTLTexture. [low confidence]",
    "status": "improve"
   },
+  "newSharedTextureWithHandle:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1687-1692 (model-reviewed, not tested)",
+   "note": "Delegates to super; non-NVMTL results left untouched.",
+   "status": "improve"
+  },
+  "newTextureWithDescriptor:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:756-799 (model-reviewed, not tested)",
+   "note": "Creates depth/MS/typed VK images; unsupported formats return nil.",
+   "status": "great"
+  },
+  "newTextureWithDescriptor:iosurface:plane:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:876-922 (model-reviewed, not tested)",
+   "note": "VRAM-share or private image with IOSurface cache path.",
+   "status": "great"
+  },
+  "peerCount": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; plugin/NVMTLDevice.m:144 (model-reviewed, not tested)",
+   "note": "No NVMTL override; MTLIOAccelDevice peer property. [low confidence]",
+   "status": "great"
+  },
+  "peerGroupID": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; plugin/NVMTLDevice.m:144 (model-reviewed, not tested)",
+   "note": "No NVMTL override; MTLIOAccelDevice peer property. [low confidence]",
+   "status": "great"
+  },
+  "peerIndex": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; plugin/NVMTLDevice.m:144 (model-reviewed, not tested)",
+   "note": "No NVMTL override; MTLIOAccelDevice peer property. [low confidence]",
+   "status": "great"
+  },
+  "readWriteTextureSupport": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1986 (model-reviewed, not tested)",
+   "note": "Reports Tier2; ShaderWrite textures created when NVK allows storage.",
+   "status": "great"
+  },
+  "recommendedMaxWorkingSetSize": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1948-1951 (model-reviewed, not tested)",
+   "note": "Returns nvmtl_vk_working_set().",
+   "status": "great"
+  },
+  "registryID": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; plugin/NVMTLDevice.m:144 (model-reviewed, not tested)",
+   "note": "No NVMTL override; MTLIOAccelDevice registryID from accelerator. [low confidence]",
+   "status": "great"
+  },
+  "sampleTimestamps:gpuTimestamp:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1854-1860; plugin/nvmtl_vk.c:7055-7073 (model-reviewed, not tested)",
+   "note": "Calibration path runs up to three GPU submit_wait timestamp queries.",
+   "status": "slow"
+  },
   "setShouldMaximizeConcurrentCompilation:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1997-1999 (model-reviewed)",
-   "note": "Stores the flag but logs that the translator path remains serialised, so the setting has no compile-path effect.",
+   "evidence": "read from source: plugin/NVMTLDevice.m:1997-1999 (model-reviewed, not tested)",
+   "note": "Stores flag; translator path remains serialised with no compile effect.",
+   "status": "stub"
+  },
+  "shouldMaximizeConcurrentCompilation": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1996 (model-reviewed, not tested)",
+   "note": "Reads stored flag that has no compile-path effect.",
+   "status": "stub"
+  },
+  "sparseTileSizeInBytes": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice_contract.m:83-84 (model-reviewed, not tested)",
+   "note": "Inherited _MTLDevice bytes; our tile-size queries ignore args as 32\u00d732. [low confidence]",
+   "status": "improve"
+  },
+  "sparseTileSizeInBytesForSparsePageSize:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice_contract.m:83-84 (model-reviewed, not tested)",
+   "note": "Inherited _MTLDevice bytes; may disagree with our constant 32\u00d732 tiles. [low confidence]",
    "status": "improve"
   },
   "sparseTileSizeWithTextureType:pixelFormat:sampleCount:": {
-   "evidence": "read from source: plugin/NVMTLDevice_contract.m:83 (model-reviewed)",
-   "note": "Ignores all arguments and always returns MTLSizeMake(32, 32, 1).",
-   "status": "improve"
+   "evidence": "read from source: plugin/NVMTLDevice_contract.m:83 (model-reviewed, not tested)",
+   "note": "Ignores all arguments; always MTLSizeMake(32, 32, 1).",
+   "status": "stub"
   },
   "sparseTileSizeWithTextureType:pixelFormat:sampleCount:sparsePageSize:": {
-   "evidence": "read from source: plugin/NVMTLDevice_contract.m:84 (model-reviewed)",
-   "note": "Ignores all arguments (including sparsePageSize) and always returns MTLSizeMake(32, 32, 1).",
-   "status": "improve"
+   "evidence": "read from source: plugin/NVMTLDevice_contract.m:84 (model-reviewed, not tested)",
+   "note": "Ignores all arguments including sparsePageSize; always 32\u00d732\u00d71.",
+   "status": "stub"
+  },
+  "supports32BitFloatFiltering": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice.m:519-526 (model-reviewed, not tested)",
+   "note": "No NVMTL override; Apple _MTLDevice after initLimits/family tables. [low confidence]",
+   "status": "great"
+  },
+  "supports32BitMSAA": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice.m:519-526 (model-reviewed, not tested)",
+   "note": "No NVMTL override; Apple _MTLDevice after initLimits/family tables. [low confidence]",
+   "status": "great"
+  },
+  "supportsBCTextureCompression": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1828; plugin/NVMTLDevice.m:673-686 (model-reviewed, not tested)",
+   "note": "YES; BC1\u2013BC7 formats mapped in nvmtl_pixfmt.",
+   "status": "great"
   },
   "supportsCounterSampling:": {
-   "evidence": "read from source: plugin/NVMTLDevice.m:1831-1832 (model-reviewed)",
-   "note": "Only accepts Draw/Dispatch/Blit boundaries; MTLCounterSamplingPointAtStageBoundary always returns NO.",
+   "evidence": "read from source: plugin/NVMTLDevice.m:1831-1832 (model-reviewed, not tested)",
+   "note": "Draw/Dispatch/Blit only; AtStageBoundary always returns NO.",
+   "status": "improve"
+  },
+  "supportsDynamicLibraries": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1656; plugin/NVMTLDevice.m:1658-1659 (model-reviewed, not tested)",
+   "note": "YES with real newDynamicLibrary: implementations.",
+   "status": "great"
+  },
+  "supportsFamily:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1870-1876 (model-reviewed, not tested)",
+   "note": "Claims Mac2/Common/Apple-like families on an NVK device.",
+   "status": "differs"
+  },
+  "supportsFeatureSet:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1878 (model-reviewed, not tested)",
+   "note": "YES for macOS feature-set range 10000\u201310005.",
+   "status": "great"
+  },
+  "supportsFunctionPointers": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1654; plugin/NVMTLLibraryLoad.m:2213-2232 (model-reviewed, not tested)",
+   "note": "YES; CPS visible-function tables implemented in LibraryLoad B39.",
+   "status": "great"
+  },
+  "supportsFunctionPointersFromRender": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1655; plugin/NVMTLLibraryLoad.m:2302-2317 (model-reviewed, not tested)",
+   "note": "YES; render-stage function tables exist in LibraryLoad B41.",
+   "status": "great"
+  },
+  "supportsPrimitiveMotionBlur": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1663 (model-reviewed, not tested)",
+   "note": "Honest NO; motion geometries are not carried.",
+   "status": "great"
+  },
+  "supportsPullModelInterpolation": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice.m:519-526 (model-reviewed, not tested)",
+   "note": "No NVMTL override; Apple _MTLDevice capability table. [low confidence]",
+   "status": "great"
+  },
+  "supportsQueryTextureLOD": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; plugin/NVMTLDevice.m:519-526 (model-reviewed, not tested)",
+   "note": "No NVMTL override; Apple _MTLDevice capability table. [low confidence]",
+   "status": "great"
+  },
+  "supportsRasterizationRateMapWithLayerCount:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=_MTLDevice; no plugin body (model-reviewed, not tested)",
+   "note": "Inherited _MTLDevice; no NVMTL rate-map implementation in plugin. [low confidence]",
+   "status": "improve"
+  },
+  "supportsRaytracing": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1792 (model-reviewed, not tested)",
+   "note": "Probes nvmtl_vk_rt_available().",
+   "status": "great"
+  },
+  "supportsRaytracingFromRender": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1793 (model-reviewed, not tested)",
+   "note": "Probes nvmtl_vk_rt_available().",
+   "status": "great"
+  },
+  "supportsRenderDynamicLibraries": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1657 (model-reviewed, not tested)",
+   "note": "YES alongside dynamic-library create path.",
+   "status": "great"
+  },
+  "supportsShaderBarycentricCoordinates": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1661 (model-reviewed, not tested)",
+   "note": "Constant YES matching areBarycentricCoordsSupported.",
+   "status": "great"
+  },
+  "supportsTextureSampleCount:": {
+   "evidence": "read from source: plugin/NVMTLDevice.m:1956-1962 (model-reviewed, not tested)",
+   "note": "Checks NVK color\u2229depth sample-count masks.",
+   "status": "great"
+  },
+  "supportsVertexAmplificationCount:": {
+   "evidence": "read from source: docs/metal-coverage/dump.json owner=MTLIOAccelDevice; no plugin body (model-reviewed, not tested)",
+   "note": "Inherited MTLIOAccelDevice; no NVMTL vertex-amplification path in plugin. [low confidence]",
    "status": "improve"
   }
  },
