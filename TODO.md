@@ -79,7 +79,8 @@ The release target is playable native macOS No Man's Sky and a small model runni
 Launching either process alone does not satisfy the target. Record the card, OS, settings/model, rendering or
 inference correctness, performance and stability. For llama.cpp, compare with CPU output.
 
-Current game observations on the RTX 2060 Super VM: Factorio fails during mipmap staging with a buffer-map
+Current game observations on the RTX 2060 Super VM: Terraria works fine according to the tester (no measured FPS
+or stability qualification yet). Factorio fails during mipmap staging with a buffer-map
 allocation error after more than 127,000 live buffers; investigate buffer lifetime and allocation pressure.
 KSP reaches atmospheric flight through OpenGL 4.1 but has low performance, disabled shader caching and BC7
 decompression warnings. No Man's Sky fails during initial loading/rendering after shader translation, with a

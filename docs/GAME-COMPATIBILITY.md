@@ -3,6 +3,11 @@
 These are observations on one RTX 2060 Super (8 GB VRAM, 256 MB BAR1) with macOS 15.8.1 in a passthrough VM.
 They do not qualify other cards or configurations. A successful launch is not a gameplay pass.
 
+## Terraria: reported working
+
+The tester reports that Terraria works fine (2026-10-18). No FPS measurement, renderer capture or long-session
+qualification was performed for this report. **User-reported gameplay success on the reference Turing setup.**
+
 ## No Man's Sky: fatal error during initial loading/rendering
 
 **Status: known broken on the tested configuration.** The native Intel build (Steam build 25732212; executable
