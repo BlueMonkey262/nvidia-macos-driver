@@ -809,14 +809,14 @@
    "status": "differs"
   },
   "kernelEndTime": {
-   "evidence": "contested: a second model reading (grok-4.7-high, adversarial) found it still differs; read from source, not tested",
-   "note": "Reviewers disagree, so it is purple until a test settles it. See the adversary notes for this method.",
-   "status": "differs"
+   "evidence": "tested: tools/test_metal_kernel_timing.m passes on the RTX 2060 Super VM (fails on the previous plugin)",
+   "note": "CPU scheduling end, never earlier than the start.",
+   "status": "great"
   },
   "kernelStartTime": {
-   "evidence": "contested: a second model reading (grok-4.7-high, adversarial) found it still differs; read from source, not tested",
-   "note": "Reviewers disagree, so it is purple until a test settles it. See the adversary notes for this method.",
-   "status": "differs"
+   "evidence": "tested: tools/test_metal_kernel_timing.m passes on the RTX 2060 Super VM (fails on the previous plugin)",
+   "note": "CPU scheduling start, readable in a scheduled handler.",
+   "status": "great"
   },
   "label": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5102 (model-reviewed, not tested)",
@@ -2549,9 +2549,9 @@
    "status": "great"
   },
   "newFunctionWithName:constantValues:completionHandler:": {
-   "evidence": "contested: a second model reading (grok-4.7-high, adversarial) found it still differs; read from source, not tested",
-   "note": "Reviewers disagree, so it is purple until a test settles it. See the adversary notes for this method.",
-   "status": "differs"
+   "evidence": "tested: tools/test_metal_async_specialize.m passes on the RTX 2060 Super VM (fails on the previous plugin)",
+   "note": "Specializes off the caller thread and calls the handler once.",
+   "status": "great"
   },
   "newFunctionWithName:constantValues:error:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:2359 (model-reviewed, not tested)",
@@ -2636,9 +2636,9 @@
    "status": "great"
   },
   "setStencilStoreActionOptions:": {
-   "evidence": "contested: a second model reading (grok-4.7-high, adversarial) found it still differs; read from source, not tested",
-   "note": "Reviewers disagree, so it is purple until a test settles it. See the adversary notes for this method.",
-   "status": "differs"
+   "evidence": "tested: tools/test_metal_stencil_store_options.m passes on the RTX 2060 Super VM (fails on the previous plugin)",
+   "note": "Accepts the legal CustomSamplePositions bit and rejects unknown bits.",
+   "status": "great"
   }
  },
  "MTLRenderCommandEncoder": {
