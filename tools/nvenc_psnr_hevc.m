@@ -16,6 +16,7 @@
 // encoder specification, as ffmpeg/Sunshine do. NVENC_PSNR_DUMP=file writes the encoded stream as Annex B (VPS, SPS
 // and PPS before every key frame) so tools/hevc_refs.py can check it.
 #import <Foundation/Foundation.h>
+#include <string.h>
 #import <VideoToolbox/VideoToolbox.h>
 #import <Metal/Metal.h>
 #include <math.h>
@@ -29,14 +30,18 @@ static CVPixelBufferRef make_frame(int w, int h, int i)
     if (CVPixelBufferCreate(kCFAllocatorDefault, w, h, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, (__bridge CFDictionaryRef)attr, &pb)) return NULL;
     CVPixelBufferLockBaseAddress(pb, 0);
     uint8_t *Y = CVPixelBufferGetBaseAddressOfPlane(pb, 0); size_t ys = CVPixelBufferGetBytesPerRowOfPlane(pb, 0);
+    // NVENC_PSNR_PATTERN=flat (Y 100, chroma 128), hgrad / vgrad (Y 16..235 across the width / height, chroma 128) or half (Y 40 | 200) gives a tiny, easy-to-read
+    // stream for comparing against another encoder bit by bit; the default is the busy test pattern.
+    const char *pat = getenv("NVENC_PSNR_PATTERN");
+    const bool flat = pat && !strcmp(pat, "flat"), hgrad = pat && !strcmp(pat, "hgrad"), vgrad = pat && !strcmp(pat, "vgrad"), half = pat && !strcmp(pat, "half"), bands3 = pat && !strcmp(pat, "bands3"), step1 = pat && !strcmp(pat, "step1"), chk8 = pat && !strcmp(pat, "chk8"), str4 = pat && !strcmp(pat, "str4"), halfoff = pat && !strcmp(pat, "halfoff");
     for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
-        int v = 40 + (((x + 4 * i) % w) * 150) / w + 30 * ((((x + 2 * i) / 32) + (y / 32)) & 1) + (((x * y) >> 9) & 15);
+        int v = flat ? 100 : hgrad ? 16 + (x * 219) / w : vgrad ? 16 + (y * 219) / h : half ? (x < w / 2 ? 40 : 200) : halfoff ? (x < w / 2 + 5 ? 40 : 200) : bands3 ? (x < w / 3 ? 40 : x < 2 * w / 3 ? 120 : 200) : step1 ? (x < w / 2 ? 100 : 101) : chk8 ? ((((x / 8) + (y / 8)) & 1) ? 200 : 40) : str4 ? (((x / 4) & 1) ? 200 : 40) : 40 + (((x + 4 * i) % w) * 150) / w + 30 * ((((x + 2 * i) / 32) + (y / 32)) & 1) + (((x * y) >> 9) & 15);
         Y[y * ys + x] = (uint8_t)(v > 235 ? 235 : v);
     }
     uint8_t *C = CVPixelBufferGetBaseAddressOfPlane(pb, 1); size_t cs = CVPixelBufferGetBytesPerRowOfPlane(pb, 1);
     for (int y = 0; y < h / 2; y++) for (int x = 0; x < w / 2; x++) {
-        C[y * cs + 2 * x] = (uint8_t)(108 + (x * 40) / (w / 2));
-        C[y * cs + 2 * x + 1] = (uint8_t)(108 + (y * 40) / (h / 2));
+        C[y * cs + 2 * x] = (uint8_t)((flat || hgrad || vgrad || half || bands3 || step1 || chk8 || str4 || halfoff) ? 128 : 108 + (x * 40) / (w / 2));
+        C[y * cs + 2 * x + 1] = (uint8_t)((flat || hgrad || vgrad || half || bands3 || step1 || chk8 || str4 || halfoff) ? 128 : 108 + (y * 40) / (h / 2));
     }
     CVPixelBufferUnlockBaseAddress(pb, 0);
     return pb;

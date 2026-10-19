@@ -36,6 +36,14 @@ CALL_CHROMA_BYTES = bytes.fromhex("41ff5550")
 # even before the point compare.
 SW_T2D_BYTES = bytes.fromhex(
     "554889e589f883e0e089f183e104c1e10589fa83e210c1e60483e63083e70f8d04c78d049009c809f05dc3")
+# Sign data hiding. Left on, the Turing engine writes the sign bits of a coefficient group after the magnitude codes,
+# the opposite of the order H.265 specifies, so any block with detail fails to decode. Two places must agree: the header
+# the library writes (nve265_headers sets sign_data_hiding_enabled_flag to 1 with `lea r8d, [r8*2+1]`, the 01 at
+# SDH_HEADER) and a setup-template byte, 02 at SDH_I_TEMPLATE for the key-frame setup and at SDH_P_TEMPLATE for the
+# inter-frame setup (offset 0x72 of each 0x7e-byte template prefix; bit 1 enables it). With both cleared the engine
+# does not hide signs and the stream is the standard one.
+SDH_HEADER, SDH_I_TEMPLATE, SDH_P_TEMPLATE = 0x82E5, 0xB062, 0xADD2
+SDH_OLD = {SDH_HEADER: 0x01, SDH_I_TEMPLATE: 0x02, SDH_P_TEMPLATE: 0x02}
 OLD_RCX = bytes.fromhex("488d0d83050000")  # lea rcx, [rip+0x583] -> 0x57b0 sw_bw16
 OLD_RAX = bytes.fromhex("488d05df040000")  # lea rax, [rip+0x4df] -> 0x5790 sw_bw8
 
@@ -102,8 +110,13 @@ def patch_buffer(data, check_hash=True):
     # Padding a later card run could use. This patch does not need it, and must not write it.
     if any(data[0xC160:0xC170]):
         raise SystemExit("padding at 0xc160 is not empty")
+    for off, old in SDH_OLD.items():
+        if data[off] != old:
+            raise SystemExit(f"sign-data-hiding byte at {off:#x} is {data[off]:#04x}, expected {old:#04x}")
     data[LEA_RCX:LEA_RCX + 7] = _lea(bytes.fromhex("488d0d"), LEA_RCX, SW_T2D)
     data[LEA_RAX:LEA_RAX + 7] = _lea(bytes.fromhex("488d05"), LEA_RAX, SW_T2D)
+    for off in SDH_OLD:
+        data[off] = 0x00
     if rip_target(data, LEA_RCX) != SW_T2D or rip_target(data, LEA_RAX) != SW_T2D:
         raise SystemExit("patched LEAs do not point at sw_t2d")
     if data[CALL_LUMA:CALL_LUMA + len(CALL_LUMA_BYTES)] != CALL_LUMA_BYTES:
@@ -120,7 +133,7 @@ def main(src, dst):
     data, n = patch_buffer(open(src, "rb").read())
     with open(dst, "wb") as f:
         f.write(data)
-    print(f"wrote {dst}: 8-bit luma and chroma tiling now call sw_t2d")
+    print(f"wrote {dst}: 8-bit luma and chroma tiling now call sw_t2d; sign data hiding off (header and both setup templates)")
     print(f"sw_t2d emulation: 0 mismatches in {n} (y=0..63, x step 8, pitch 2048)")
 
 
