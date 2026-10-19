@@ -39,6 +39,7 @@ static inline FILE *nvmtl_rel_fopen(const char *p, const char *m) { return nvmtl
 #define fopen(p, m) nvmtl_rel_fopen(p, m)
 #endif
 int nvmtl_vk_init(void);
+void nvmtl_client_census_request(const char *why);
 void nvmtl_gl_caps_enable(void);
 uint16_t nvmtl_vk_set_accelerator(mach_port_t accelerator);
 uint16_t nvmtl_vk_vendor(void);
@@ -67,6 +68,7 @@ static struct { const char *fmt; uint64_t n; } g_nvlog_sites[NVLOG_SITES];
 static pthread_mutex_t g_nvlog_lock = PTHREAD_MUTEX_INITIALIZER;
 static int nvlog_dropped(const char *fmt, uint64_t *rep) {
     *rep = 0;
+    if (!strncmp(fmt, "client census:", 14)) return 0;
     pthread_mutex_lock(&g_nvlog_lock);
     int i = 0;
     for (; i < NVLOG_SITES; i++) {
@@ -124,6 +126,7 @@ static int nvmtl_alloc_blocked(void) {
 }
 static void nvmtl_alloc_ok(void) { atomic_store(&g_oom_streak, 0); }
 static void nvmtl_alloc_failed(const char *what) {
+    nvmtl_client_census_request(what);
     uint64_t n = atomic_fetch_add(&g_oom_streak, 1) + 1;
     atomic_store(&g_oom_until, clock_gettime_nsec_np(CLOCK_MONOTONIC) + NVMTL_OOM_COOLDOWN_NS);
     if (n < NVMTL_OOM_STREAK) return;
