@@ -7,7 +7,7 @@ DUMP.json comes from tools/metal_coverage.m. A method is "implemented" when some
 answers the selector; that says nothing about whether it works. Colors:
   gray    not implemented            red     implemented, very slow       yellow  needs improvement, good for now
   green   works great               purple  implemented, differs from Apple's result
-  hatched implemented, not yet rated (the default for every implemented method; only metal-ratings.json can change it)
+  blue    implemented, not yet rated (the default for every implemented method; only metal-ratings.json can change it)
 Exit codes: 0 done, 2 bad input."""
 import argparse
 import glob
