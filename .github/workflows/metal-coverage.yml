@@ -1,0 +1,41 @@
+name: Metal coverage map
+
+# Re-renders docs/metal-coverage.svg from the committed data. The numbers come from tools/metal_coverage.m, which has to be
+# run by hand on a Mac with the driver installed (docs/metal-coverage/README.md); CI only turns data into the picture.
+on:
+  push:
+    paths:
+      - docs/metal-coverage/**
+      - tools/metal_coverage.py
+      - tools/metal-ratings.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: metal-coverage
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render the map
+        run: |
+          python3 tools/metal_coverage.py docs/metal-coverage/dump.json \
+            --public-list docs/metal-coverage/public-protocols.txt \
+            --ratings tools/metal-ratings.json --svg docs/metal-coverage.svg
+      - name: Commit the map if it changed
+        run: |
+          if git diff --quiet -- docs/metal-coverage.svg; then
+            echo "Map unchanged"
+          else
+            git config user.name "BlueMonkey262"
+            git config user.email "101306449+BlueMonkey262@users.noreply.github.com"
+            git add docs/metal-coverage.svg
+            git commit -m "docs: update Metal coverage map [skip ci]"
+            git push
+          fi

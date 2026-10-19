@@ -1,5 +1,9 @@
 # NullMoth NVIDIA Driver for macOS (personal fork)
 
+[![Metal API coverage](docs/metal-coverage.svg)](docs/metal-coverage/README.md)
+
+Every cell is one Metal method; [what the colors mean and how the map is made](docs/metal-coverage/README.md).
+
 > **This is a personal fork of [nullmoth/nvidia-macos-driver](https://github.com/nullmoth/nvidia-macos-driver), not
 > affiliated with NullMoth Systems.** It tracks upstream and adds a few changes, listed in [FORK.md](FORK.md):
 > hardware H.264 encode on Turing (RTX 20 / GTX 16) and its regression test. The license is unchanged
