@@ -583,13 +583,16 @@ static __thread int gZeroSkip;
     nvlog("newBufferWithLength:%lu storage %d -> %p%s", (unsigned long)len, (int)b->_storage, (__bridge void *)b, b->_b.map ? "" : " VRAM"); return b; }
 
 - (id<MTLBuffer>)newBufferWithBytes:(const void *)bytes length:(NSUInteger)len options:(MTLResourceOptions)opt {
-    int priv = (((opt >> MTLResourceStorageModeShift) & 0xF) == MTLStorageModePrivate);
-    MTLResourceOptions o2 = priv ? ((opt & ~(MTLResourceOptions)(0xF << MTLResourceStorageModeShift)) | MTLResourceStorageModeShared) : opt;
+    const MTLStorageMode sm = (MTLStorageMode)((opt >> MTLResourceStorageModeShift) & 0xF);
+    // Apple's Metal rejects Private/Memoryless for the ...WithBytes variant (debug driver aborts).
+    if (sm == MTLStorageModePrivate || sm == MTLStorageModeMemoryless) {
+        nvlog("newBufferWithBytes: storage mode %d -> nil (storageModePrivate incompatible with ...WithBytes variant of newBuffer)", (int)sm);
+        return nil;
+    }
     gZeroSkip = bytes != NULL;
-    id<MTLBuffer> b = [self newBufferWithLength:len options:o2];
+    id<MTLBuffer> b = [self newBufferWithLength:len options:opt];
     gZeroSkip = 0;
     if (b && b.contents && bytes) memcpy(b.contents, bytes, len);
-    if (b && priv) ((NVMTLBuffer *)b)->_storage = MTLStorageModePrivate;
     if (b && bytes && ((NVMTLBuffer *)b)->_shadow.map) [b didModifyRange:NSMakeRange(0, len)];
     return b; }
 
@@ -1143,7 +1146,9 @@ static void nvmtl_stitch_dump(const char *what, NSString *dag, NSArray *fns, id 
 - (void)newLibraryWithStitchedDescriptor:(id)desc completionHandler:(void (^)(id<MTLLibrary>, NSError *))handler {
     NSError *e = nil;
     id<MTLLibrary> lib = [self newLibraryWithStitchedDescriptor:desc error:&e];
-    if (handler) handler(lib, lib ? nil : e);
+    if (!handler) return;
+    NSError *err = lib ? nil : e;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ handler(lib, err); });
 }
 - (id<MTLLibrary>)newLibraryWithStitchedDescriptorSPI:(id)desc error:(NSError **)err {
     nvlog("newLibraryWithStitchedDescriptorSPI: routed through the public stitcher bridge");
@@ -1162,6 +1167,7 @@ static void nvmtl_stitch_dump(const char *what, NSString *dag, NSArray *fns, id 
     if (!fns) return nvmtl_fail(err, @"newLibraryWithData: translation produced nothing");
     NVMTLLibrary *lib = [NVMTLLibrary new]; lib->_fns = fns; lib->_stages = stages; lib->_airs = airs; lib->_externs = nvmtl_externs_of_airs(airs);
     lib->_raw = bytes;
+    nvmtl_library_note_container(lib);
     nvmtl_vendor_compile_airs((NSDictionary<NSString *, NSString *> *)airs,
                               (NSDictionary<NSString *, NSString *> *)stages);
     return lib; }
@@ -1241,6 +1247,7 @@ static void nvmtl_stitch_dump(const char *what, NSString *dag, NSArray *fns, id 
     if (!fns) return nvmtl_fail(err, [NSString stringWithFormat:@"newLibraryWithURL: translation produced nothing for %@", url.path]);
     NVMTLLibrary *lib = [NVMTLLibrary new]; lib->_fns = fns; lib->_stages = stages; lib->_airs = airs; lib->_externs = nvmtl_externs_of_airs(airs);
     lib->_raw = d;
+    nvmtl_library_note_container(lib);
     objc_setAssociatedObject(lib, &gNVMTLLibKeyAssoc, ckey, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (st0 == 0) objc_setAssociatedObject(lib, &gNVMTLLibFileAssoc, @[[fp copy], [NSData dataWithBytes:&s0 length:sizeof s0]], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     return lib; }
@@ -1257,7 +1264,8 @@ static void nvmtl_stitch_dump(const char *what, NSString *dag, NSArray *fns, id 
     if (!fns.count) return nvmtl_fail(err, [NSString stringWithFormat:@"newLibraryWithFile: translation produced nothing for %@", path]);
     nvlog("newLibraryWithFile: %s -> %lu functions", path.UTF8String, (unsigned long)fns.count);
     NVMTLLibrary *lib = [NVMTLLibrary new]; lib->_fns = fns; lib->_stages = stages; lib->_airs = airs; lib->_externs = nvmtl_externs_of_airs(airs);
-    lib->_rawPath = [path copy];
+    lib->_raw = d; lib->_rawPath = [path copy];
+    nvmtl_library_note_container(lib);
     objc_setAssociatedObject(lib, &gNVMTLLibKeyAssoc, ckey, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (st0 == 0) objc_setAssociatedObject(lib, &gNVMTLLibFileAssoc, @[lib->_rawPath, [NSData dataWithBytes:&s0 length:sizeof s0]], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     return lib; }
@@ -1387,6 +1395,8 @@ void nvmtl_gl_tag_reflection(id refl, MTLRenderPipelineDescriptor *d);
     if ([samplePayload isKindOfClass:[NSDictionary class]] && !nvmtl_vk_sample_positions_backend())
         return nvmtl_fail(err, @"pipeline: fragment sample positions require the checked NVIDIA runtime payload contract");
     NVMTLRenderPipelineState *ps = [NVMTLRenderPipelineState new];
+    ps->_maxTotalThreadsPerThreadgroup = 1024;
+    if ([d respondsToSelector:@selector(shaderValidation)]) ps->_shaderValidation = [(id)d shaderValidation];
     nvk_rt rt; memset(&rt, 0, sizeof rt); uint32_t a8mask = 0;
     for (uint32_t i = 0; i < NVMTL_NCOL; i++) {
         MTLRenderPipelineColorAttachmentDescriptor *ca = d.colorAttachments[i];
@@ -1613,7 +1623,9 @@ static void nvmtl_log_compute_descriptor(MTLComputePipelineDescriptor *d) {
     id<MTLComputePipelineState> ps = [self newComputePipelineStateWithFunction:kfn error:err];
     if ([(id)ps isKindOfClass:[NVMTLComputePipelineState class]]) { ((NVMTLComputePipelineState *)ps)->_icb = d.supportIndirectCommandBuffers;
         ((NVMTLComputePipelineState *)ps)->_askT = d.maxTotalThreadsPerThreadgroup;
-        ((NVMTLComputePipelineState *)ps)->_label = [d.label copy]; }
+        ((NVMTLComputePipelineState *)ps)->_label = [d.label copy];
+        if ([d respondsToSelector:@selector(shaderValidation)])
+            ((NVMTLComputePipelineState *)ps)->_shaderValidation = d.shaderValidation; }
     if (r) *r = ps ? (MTLComputePipelineReflection *)nvmtl_compute_reflection(kfn) : nil;
     return ps;
 }
@@ -1920,14 +1932,16 @@ static void nvmtl_log_compute_descriptor(MTLComputePipelineDescriptor *d) {
             case MTLDataTypeChar: case MTLDataTypeUChar: case MTLDataTypeBool: sz = 1; break;
             default: sz = 8; break;
         }
-        NSUInteger align = sz >= 16 ? 16 : sz, n = a.arrayLength ? a.arrayLength : 1;
+        NSUInteger align = sz >= 16 ? 16 : (sz ? sz : 1), n = a.arrayLength ? a.arrayLength : 1;
         off = (off + align - 1) / align * align;
         for (NSUInteger k = 0; k < n; k++)
-            [fields addObject:@{ @"argument_index": @(a.index + k), @"field_offset": @(off + k * sz), @"buffer_index": @(NSUIntegerMax), @"descriptor_built": @YES }];
+            [fields addObject:@{ @"argument_index": @(a.index + k), @"field_offset": @(off + k * sz),
+                                 @"field_size": @(sz), @"buffer_index": @(NSUIntegerMax), @"descriptor_built": @YES }];
         off += n * sz;
     }
     NVMTLArgumentEncoder *e = [NVMTLArgumentEncoder new];
     e->_fields = fields; e->_fieldByIndex = nvmtl_index_argument_fields(fields);
+    e->_airSize = off; e->_airAlign = 8;
     nvlog("newArgumentEncoderWithArguments: %lu descriptor(s) -> %lu field(s), %lu bytes", (unsigned long)args.count, (unsigned long)fields.count, (unsigned long)off);
     return e;
 }

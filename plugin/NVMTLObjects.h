@@ -60,7 +60,7 @@ static inline void *nvmtl_buf_cpu(NVMTLBuffer *b) { nvmtl_buf_settle(b); return 
 @end
 @interface NVMTLFunction : NSObject <MTLFunction> { @public NSData *_spirv; NSString *_fname; NSString *_stage; NSString *_air; NSDictionary *_fc; NSArray *_embedded; unsigned char _bcHash[32]; BOOL _bcHashed;
   NSDictionary *_refl; NSDictionary *_airNames; NSArray *_arguments;
-  id _lib; id _fcv; NSString *_specName; BOOL _needsLink; } @end
+  id _lib; id _fcv; NSString *_specName; BOOL _needsLink; MTLFunctionOptions _options; } @end
 NSDictionary *nvmtl_function_reflection(NVMTLFunction *function);
 NSDictionary *nvmtl_air_names(NVMTLFunction *function);
 uint64_t nvmtl_resid_for_texture(id t);
@@ -86,6 +86,7 @@ id<MTLFunction> nvmtl_link_kernel(MTLComputePipelineDescriptor *d, NSError **err
 id<MTLFunction> nvmtl_link_stage(id<MTLFunction> k, MTLLinkedFunctions *lf, NSArray *dylibs, NSError **err);
 void nvmtl_render_keep_linked(id ps, id<MTLFunction> vf, id<MTLFunction> ff);
 void nvmtl_note_compile_dylibs(id lib, NSArray *libraries);
+void nvmtl_library_note_container(id lib);
 id nvmtl_new_dylib(id<MTLLibrary> lib, NSError **err);
 id nvmtl_new_dylib_url(NSURL *url, NSError **err);
 id nvmtl_new_binary_archive(MTLBinaryArchiveDescriptor *d, NSError **err);
@@ -102,10 +103,11 @@ static inline uint32_t nvmtl_vk_layers_for_desc(uint32_t t, uint32_t n, uint32_t
 } @end
 extern id gNVMTLMainDevice;
 @interface NVMTLLibrary : NSObject <MTLLibrary> { @public NSDictionary<NSString *, NSData *> *_fns; NSMutableDictionary<NSString *, NSData *> *_compiledFns; NSDictionary<NSString *, NSString *> *_stages, *_airs; NSArray<NSString *> *_externs;
-  NSData *_raw; id _appleTwin; BOOL _twinTried; NSString *_rawPath; } @end
+  NSData *_raw; id _appleTwin; BOOL _twinTried; NSString *_rawPath; NSString *_installName; } @end
 @interface NVMTLRenderPipelineState : NSObject <MTLRenderPipelineState> { @public nvk_pipeline _p;
   NSString *_vname, *_fname, *_blend, *_vdesc; MTLRenderPipelineDescriptor *_descriptor; NSMutableDictionary *_samplerVariants;
-  NVMTLFunction *_linkedVert, *_linkedFrag; uint32_t _a8mask; } @end
+  NVMTLFunction *_linkedVert, *_linkedFrag; uint32_t _a8mask;
+  NSUInteger _maxTotalThreadsPerThreadgroup; BOOL _threadgroupSizeMatchesTileSize; MTLShaderValidation _shaderValidation; } @end
 @interface NVMTLCommandQueue : NSObject <MTLCommandQueue> {
   @public nvk_queue _q; id _dev; id _completionQueue; dispatch_queue_t _callbackOrderQueue; NSMutableArray *_reservations; dispatch_semaphore_t _capacity; NSUInteger _capacityCount;
 } @end
@@ -162,7 +164,7 @@ extern id gNVMTLMainDevice;
 - (void)nvmtlGiveRange:(NSUInteger)off length:(NSUInteger)len;
 @end
 @interface NVMTLComputePipelineState : NSObject <MTLComputePipelineState> { @public nvk_pipeline _p; NVMTLFunction *_function; NSMutableDictionary *_samplerVariants;
-    BOOL _icb;
+    BOOL _icb; MTLShaderValidation _shaderValidation;
 } @end
 @interface NVMTLIndirectCommand : NSObject <MTLIndirectRenderCommand, MTLIndirectComputeCommand> {
   @public id _ps; NSMutableArray *_vbufs; NSMutableArray *_fbufs;

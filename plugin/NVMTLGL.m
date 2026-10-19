@@ -395,7 +395,7 @@ NVGL_ZERO_NET(NVMTLGLBinding)
                                      _name, (long)_type, (long)_access, (unsigned long)_index, (unsigned long)_size]; }
 @end
 @interface NVMTLGLTexBinding : NSObject <MTLTextureBinding> { @public NSString *_name; MTLBindingAccess _access; NSUInteger _index;
-  MTLTextureType _ttype; } @end
+  MTLTextureType _ttype; MTLDataType _tdtype; BOOL _depth; NSUInteger _arrayLength; } @end
 @implementation NVMTLGLTexBinding
 - (NSString *)name { return _name; }
 - (MTLBindingType)type { return MTLBindingTypeTexture; }
@@ -406,10 +406,10 @@ NVGL_ZERO_NET(NVMTLGLBinding)
 - (BOOL)isArgument { return YES; }
 - (BOOL)argument { return YES; }
 - (MTLTextureType)textureType { return _ttype; }
-- (MTLDataType)textureDataType { return MTLDataTypeNone; }
-- (BOOL)isDepthTexture { return NO; }
-- (BOOL)depthTexture { return NO; }
-- (NSUInteger)arrayLength { return 1; }
+- (MTLDataType)textureDataType { return _tdtype; }
+- (BOOL)isDepthTexture { return _depth; }
+- (BOOL)depthTexture { return _depth; }
+- (NSUInteger)arrayLength { return _arrayLength ?: 1; }
 // same older getters as NVMTLGLBinding, with what MTLArgument gives for a texture
 - (NSUInteger)alignment { return 0; }
 - (NSUInteger)dataSize { return 0; }
@@ -478,9 +478,27 @@ static NSArray *nvmtl_gl_cl_bindings(NSString *ll) {
             t->_access = [b rangeOfString:@"!\"air.read_write\""].location != NSNotFound ? MTLBindingAccessReadWrite
                        : [b rangeOfString:@"!\"air.write\""].location != NSNotFound ? MTLBindingAccessWriteOnly : MTLBindingAccessReadOnly;
             NSString *tn = str(b, @"air.arg_type_name") ?: @"";
-            t->_ttype = [tn hasPrefix:@"texture1d_array"] ? MTLTextureType1DArray : [tn hasPrefix:@"texture1d"] ? MTLTextureType1D
-                      : [tn hasPrefix:@"texture2d_array"] ? MTLTextureType2DArray : [tn hasPrefix:@"texture3d"] ? MTLTextureType3D
+            t->_ttype = [tn hasPrefix:@"texture1d_array"] || [tn hasPrefix:@"depth1d_array"] ? MTLTextureType1DArray
+                      : [tn hasPrefix:@"texture1d"] || [tn hasPrefix:@"depth1d"] ? MTLTextureType1D
+                      : [tn hasPrefix:@"texture2d_array"] || [tn hasPrefix:@"depth2d_array"] ? MTLTextureType2DArray
+                      : [tn hasPrefix:@"texture3d"] ? MTLTextureType3D
                       : [tn hasPrefix:@"texture_buffer"] ? MTLTextureTypeTextureBuffer : MTLTextureType2D;
+            t->_depth = [tn hasPrefix:@"depth"];
+            t->_tdtype = MTLDataTypeFloat;
+            NSRange lt = [tn rangeOfString:@"<"];
+            if (lt.location != NSNotFound) {
+                NSString *rest = [tn substringFromIndex:NSMaxRange(lt)];
+                NSRange cut = [rest rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@",>"]];
+                NSString *el = [(cut.location == NSNotFound ? rest : [rest substringToIndex:cut.location])
+                                stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+                if ([el hasPrefix:@"half"]) t->_tdtype = MTLDataTypeHalf;
+                else if ([el hasPrefix:@"int"]) t->_tdtype = MTLDataTypeInt;
+                else if ([el hasPrefix:@"uint"]) t->_tdtype = MTLDataTypeUInt;
+                else if ([el hasPrefix:@"short"]) t->_tdtype = MTLDataTypeShort;
+                else if ([el hasPrefix:@"ushort"]) t->_tdtype = MTLDataTypeUShort;
+            }
+            NSInteger arr = num(b, @"air.array_length"); if (arr < 0) arr = num(b, @"air.array_size");
+            t->_arrayLength = arr > 0 ? (NSUInteger)arr : 1;
             [out addObject:t]; continue;
         }
         if (!buf && !cst) { nvlog("GL: OpenCL argument not reflected: %s", b.UTF8String); continue; }

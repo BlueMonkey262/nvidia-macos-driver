@@ -1826,7 +1826,7 @@ id<MTLFunction> nvmtl_link_kernel(MTLComputePipelineDescriptor *d, NSError **err
 - (dispatch_data_t)airData NS_RETURNS_RETAINED;
 @end
 static char kNVMTLCompileDylibs;
-static char kNVMTLRenderVert, kNVMTLRenderFrag;
+static char kNVMTLRenderVert, kNVMTLRenderFrag, kNVMTLRenderMesh, kNVMTLRenderObject;
 
 static BOOL nvmtl_mtlb_dynamic(NSData *raw, NSString **nameOut, NSArray<NSString *> **importsOut)
 {
@@ -2285,10 +2285,25 @@ void nvmtl_note_compile_dylibs(id lib, NSArray *libraries) {
     if (![lib isKindOfClass:[NVMTLLibrary class]] || !libraries.count) return;
     objc_setAssociatedObject(lib, &kNVMTLCompileDylibs, [libraries copy], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
+void nvmtl_library_note_container(id lib) {
+    if (![lib isKindOfClass:[NVMTLLibrary class]]) return;
+    NVMTLLibrary *l = (NVMTLLibrary *)lib;
+    NSString *nm = nil;
+    if (nvmtl_mtlb_dynamic(l->_raw, &nm, NULL)) l->_installName = nm;
+}
 
 void nvmtl_render_keep_linked(id ps, id<MTLFunction> vf, id<MTLFunction> ff) {
     if (vf && objc_getAssociatedObject(vf, &kNVMTLTableFns)) objc_setAssociatedObject(ps, &kNVMTLRenderVert, vf, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (ff && objc_getAssociatedObject(ff, &kNVMTLTableFns)) objc_setAssociatedObject(ps, &kNVMTLRenderFrag, ff, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+static void nvmtl_render_keep_linked_stage(id ps, id<MTLFunction> fn, MTLLinkedFunctions *lf, const void *key) {
+    if (fn && objc_getAssociatedObject(fn, &kNVMTLTableFns)) {
+        objc_setAssociatedObject(ps, key, fn, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return;
+    }
+    // Mesh/object stages may not run through nvmtl_link_stage; still expose descriptor-linked functions for handles.
+    NSArray *fns = lf.functions;
+    if (fns.count) objc_setAssociatedObject(ps, key, [fns copy], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 static id<MTLVisibleFunctionTable> nvmtl_vft_new(MTLVisibleFunctionTableDescriptor *d, const char *what) {
     NSUInteger n = d.functionCount ? d.functionCount : 1;
@@ -2301,12 +2316,16 @@ static id<MTLVisibleFunctionTable> nvmtl_vft_new(MTLVisibleFunctionTableDescript
 }
 @implementation NVMTLRenderPipelineState (B41FunctionPointers)
 - (id<MTLFunctionHandle>)functionHandleWithFunction:(id<MTLFunction>)f stage:(MTLRenderStages)st {
-    const void *key = (st & MTLRenderStageFragment) ? &kNVMTLRenderFrag : (st & MTLRenderStageVertex) ? &kNVMTLRenderVert : NULL;
-    id lf = key ? objc_getAssociatedObject(self, key) : nil;
-    NSArray *c = lf ? objc_getAssociatedObject(lf, &kNVMTLTableFns) : nil;
+    const void *key = NULL;
+    if (st & MTLRenderStageFragment) key = &kNVMTLRenderFrag;
+    else if (st & MTLRenderStageVertex) key = &kNVMTLRenderVert;
+    else if (st & MTLRenderStageMesh) key = &kNVMTLRenderMesh;
+    else if (st & MTLRenderStageObject) key = &kNVMTLRenderObject;
+    id held = key ? objc_getAssociatedObject(self, key) : nil;
+    NSArray *c = [held isKindOfClass:[NSArray class]] ? held : (held ? objc_getAssociatedObject(held, &kNVMTLTableFns) : nil);
     for (NSUInteger k = 0; k < c.count; k++) {
-        NVMTLFunction *cf = c[k];
-        if (cf == (id)f || [cf.name isEqualToString:f.name]) {
+        id cf = c[k];
+        if (cf == (id)f || [[cf name] isEqualToString:f.name]) {
             NVMTLFunctionHandle *h = [NVMTLFunctionHandle new]; h->_id = k + 1; h->_fn = f; return h;
         }
     }
@@ -2315,7 +2334,9 @@ static id<MTLVisibleFunctionTable> nvmtl_vft_new(MTLVisibleFunctionTableDescript
     return nil;
 }
 - (id<MTLVisibleFunctionTable>)newVisibleFunctionTableWithDescriptor:(MTLVisibleFunctionTableDescriptor *)d stage:(MTLRenderStages)st {
-    return nvmtl_vft_new(d, (st & MTLRenderStageFragment) ? "fragment" : "vertex");
+    const char *what = (st & MTLRenderStageFragment) ? "fragment" : (st & MTLRenderStageMesh) ? "mesh"
+                     : (st & MTLRenderStageObject) ? "object" : "vertex";
+    return nvmtl_vft_new(d, what);
 }
 @end
 @implementation NVMTLRenderCommandEncoder (B41FunctionPointers)
@@ -2475,9 +2496,9 @@ static NSUInteger nvmtl_mesh_stage_max(NVMTLMeshInfo *_Nonnull mi, NVMTLComputeP
 }
 @implementation NVMTLRenderPipelineState (AppsPSOMesh)
 - (NSUInteger)objectThreadExecutionWidth { NVMTLMeshInfo *mi = objc_getAssociatedObject(self, &kNVMTLMeshInfo);
-    return mi && mi->_o ? [mi->_o threadExecutionWidth] : [self threadExecutionWidth]; }
+    return mi && mi->_o ? [mi->_o threadExecutionWidth] : 0; }
 - (NSUInteger)meshThreadExecutionWidth { NVMTLMeshInfo *mi = objc_getAssociatedObject(self, &kNVMTLMeshInfo);
-    return mi && mi->_k ? [mi->_k threadExecutionWidth] : [self threadExecutionWidth]; }
+    return mi && mi->_k ? [mi->_k threadExecutionWidth] : 0; }
 - (NSUInteger)maxTotalThreadsPerObjectThreadgroup { NVMTLMeshInfo *mi = objc_getAssociatedObject(self, &kNVMTLMeshInfo);
     return mi && mi->_o ? nvmtl_mesh_stage_max(mi, mi->_o, mi->_tgObj, "object") : 0; }
 - (NSUInteger)maxTotalThreadsPerMeshThreadgroup { NVMTLMeshInfo *mi = objc_getAssociatedObject(self, &kNVMTLMeshInfo);
@@ -2624,6 +2645,11 @@ static NSString *nvmtl_mesh_text(uint8_t *p, size_t n) {
                                        mf->_fname.UTF8String, w2.UTF8String); }
     }
     objc_setAssociatedObject(ps, &kNVMTLMeshInfo, mi, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    ps->_maxTotalThreadsPerThreadgroup = nvmtl_mesh_stage_max(mi, mi->_k, mi->_tgMesh, "mesh");
+    if ([md respondsToSelector:@selector(shaderValidation)]) ps->_shaderValidation = md.shaderValidation;
+    // Fragment linked functions are already kept by the inner newRenderPipelineStateWithDescriptor.
+    nvmtl_render_keep_linked_stage(ps, ofn, [md respondsToSelector:@selector(objectLinkedFunctions)] ? md.objectLinkedFunctions : nil, &kNVMTLRenderObject);
+    nvmtl_render_keep_linked_stage(ps, mfn, [md respondsToSelector:@selector(meshLinkedFunctions)] ? md.meshLinkedFunctions : nil, &kNVMTLRenderMesh);
     nvlog("mesh pipeline: \"%s\"%s%s / fragment %s -> %p (indirect variant %s, %lu+%lu constant(s))", mf->_fname.UTF8String, of ? " behind " : "",
           of ? of->_fname.UTF8String : "", [[ffn name] UTF8String], (__bridge void *)ps, of ? "n/a" : (mi->_psi ? "yes" : "NO"),
           (unsigned long)(of ? of->_fc.count : 0), (unsigned long)mf->_fc.count);
