@@ -44,5 +44,26 @@ for batch in sorted(pathlib.Path(args.review_dir).glob("batch*")):
                 n += 1
         used[batch.name] = f"{kind} ({n})"
         break
+# Second-opinion pass (verify/result-*.json): the same statuses over the first pass. A confirmed "good" is marked as such;
+# a downgrade replaces the first rating.
+n_conf = n_down = 0
+for f in sorted((pathlib.Path(args.review_dir) / "verify").glob("result-*.json")):
+    try:
+        data = json.loads(f.read_text())
+    except ValueError:
+        continue
+    for proto, sels in data.items():
+        for sel, v in sels.items() if isinstance(sels, dict) else ():
+            cur = out.get(proto, {}).get(sel)
+            if not cur or not isinstance(v, dict) or v.get("status") not in MAP:
+                continue
+            if v["status"] == "good":
+                cur["note"] += " [confirmed by a second review]"
+                n_conf += 1
+            else:
+                note = v.get("note", "") + (" [low confidence]" if v.get("confidence") == "low" else "")
+                out[proto][sel] = {"status": MAP[v["status"]], "note": note + " [second review]", "evidence": v.get("evidence", "")}
+                n_down += 1
+used["verify"] = f"{n_conf} confirmed, {n_down} downgraded"
 pathlib.Path(args.out).write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
 print(", ".join(f"{b}: {k}" for b, k in used.items()))
