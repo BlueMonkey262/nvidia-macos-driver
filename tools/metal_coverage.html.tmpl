@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Metal coverage map</title>
 <style>
-:root{--bg:#0f1218;--panel:#1a1f2a;--fg:#e6e9ef;--mut:#8b93a3;--line:#0f1218;--missing:#6b7280;--slow:#dc2626;--improve:#eab308;--great:#22a559;--differs:#9333ea;--unrated:#4f78c4}
+:root{--bg:#0f1218;--panel:#1a1f2a;--fg:#e6e9ef;--mut:#8b93a3;--line:#0f1218;--missing:#6b7280;--inherited:#2fa6a0;--slow:#dc2626;--improve:#eab308;--great:#22a559;--differs:#9333ea;--unrated:#4f78c4}
 @media (prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#f6f7f9;--panel:#e3e6ec;--fg:#161a22;--mut:#5b6474;--line:#f6f7f9;--missing:#9aa1ad;--unrated:#7f9fdc}}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif}
 main{padding:16px;max-width:1400px;margin:0 auto}
@@ -14,7 +14,7 @@ h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}
 .g{position:absolute;pointer-events:none}.g>.c{pointer-events:auto}.g>.o{position:absolute;inset:0;border:2px solid var(--bg);pointer-events:none}
 .g>.t{position:absolute;left:4px;top:2px;font-size:11px;font-weight:700;color:#fff;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none;white-space:nowrap;overflow:hidden;max-width:calc(100% - 6px);z-index:2}
 .c{position:absolute;box-sizing:border-box;border:.5px solid var(--bg)}
-.missing{background:var(--missing)}.slow{background:var(--slow)}.improve{background:var(--improve)}.great{background:var(--great)}.differs{background:var(--differs)}
+.missing{background:var(--missing)}.inherited{background:var(--inherited)}.slow{background:var(--slow)}.improve{background:var(--improve)}.great{background:var(--great)}.differs{background:var(--differs)}
 .unrated{background:var(--unrated)}
 #tip{position:fixed;display:none;background:#000d;color:#fff;padding:6px 8px;border-radius:4px;font-size:12px;max-width:420px;pointer-events:none;z-index:9;word-break:break-all}
 </style></head><body><main>
@@ -26,7 +26,7 @@ h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}
 </main>
 <script>
 const D=/*DATA*/;
-const NAMES={missing:"Not implemented",slow:"Implemented, very slow",improve:"Needs improvement, fine for now",great:"Works great",differs:"Implemented, differs from Apple's result",unrated:"Implemented, not yet rated"};
+const NAMES={missing:"Not implemented",inherited:"Answered by Apple's Metal code, not ours",slow:"Implemented, very slow",improve:"Needs improvement, fine for now",great:"Works great",differs:"Implemented, differs from Apple's result",unrated:"Implemented, not yet rated"};
 document.getElementById("sub").textContent=D.total+" methods in "+D.groups.length+" protocols"+(D.device?" - "+D.device:"");
 document.getElementById("legend").innerHTML=Object.keys(NAMES).map(k=>`<li><span class="sw ${k}"></span>${NAMES[k]} (${D.totals[k]})</li>`).join("");
 // Dense squarified treemap: one block per protocol, sized by its method count. Inside a block the methods are the

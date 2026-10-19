@@ -5,6 +5,7 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <objc/runtime.h>
+#import <dlfcn.h>
 
 static void collect(Protocol *p, NSMutableSet *seen, NSMutableArray *out) {
     NSString *pn = NSStringFromProtocol(p);
@@ -59,7 +60,24 @@ int main(void) {
                     BOOL r = [m[@"inst"] boolValue] ? [clist[i] instancesRespondToSelector:s] : [clist[i] respondsToSelector:s];
                     if (r) [resp addObject:[NSString stringWithFormat:@"%@|%@", m[@"inst"], m[@"sel"]]];
                 }
-            classes[cn] = @{@"conforms": conf, @"own": own, @"responds": resp, @"super": NSStringFromClass(class_getSuperclass(clist[i])) ?: @""};
+            // Who really defines each answered selector: the first class up the chain with a method of that name, and the
+            // image its code lives in. Separates our own code from methods inherited from Apple's classes.
+            NSMutableDictionary *owner = [NSMutableDictionary new];
+            for (NSString *r in resp) {
+                BOOL inst = [r hasPrefix:@"1|"];
+                SEL s = NSSelectorFromString([r substringFromIndex:2]);
+                for (Class c = clist[i]; c; c = class_getSuperclass(c)) {
+                    Method m = inst ? class_getInstanceMethod(c, s) : class_getClassMethod(c, s);
+                    if (!m) break;
+                    Class sup = class_getSuperclass(c);
+                    Method sm = sup ? (inst ? class_getInstanceMethod(sup, s) : class_getClassMethod(sup, s)) : NULL;
+                    if (sm && method_getImplementation(sm) == method_getImplementation(m)) continue;
+                    Dl_info info; const char *img = dladdr((void *)method_getImplementation(m), &info) && info.dli_fname ? info.dli_fname : "?";
+                    owner[r] = [NSString stringWithFormat:@"%s@%s", class_getName(c), img];
+                    break;
+                }
+            }
+            classes[cn] = @{@"conforms": conf, @"own": own, @"responds": resp, @"owner": owner, @"super": NSStringFromClass(class_getSuperclass(clist[i])) ?: @""};
         }
         free(clist);
         root[@"classes"] = classes;

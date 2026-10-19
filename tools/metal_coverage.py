@@ -7,6 +7,7 @@ DUMP.json comes from tools/metal_coverage.m. A method is "implemented" when some
 answers the selector; that says nothing about whether it works. Colors:
   gray    not implemented            red     implemented, very slow       yellow  needs improvement, good for now
   green   works great               purple  implemented, differs from Apple's result
+  teal    answered by Apple's own Metal code (inherited), not by ours
   blue    implemented, not yet rated (the default for every implemented method; only metal-ratings.json can change it)
 Exit codes: 0 done, 2 bad input."""
 import argparse
@@ -16,7 +17,7 @@ import pathlib
 import re
 import sys
 
-STATUSES = ["missing", "slow", "improve", "great", "differs", "unrated"]
+STATUSES = ["missing", "inherited", "slow", "improve", "great", "differs", "unrated"]
 RATED = {"slow", "improve", "great", "differs"}
 
 ap = argparse.ArgumentParser()
@@ -39,23 +40,27 @@ if not protos:
 
 groups, warnings = [], []
 for p, methods in protos.items():
-    answered = set()
+    answered, ours = set(), set()
     for c, v in dump["classes"].items():
         if p in v["conforms"]:
             answered.update(v["responds"])
+            for k, o in v.get("owner", {}).items():
+                if "NVMTL" in o.split("@", 1)[-1] or "GPUBundles" in o.split("@", 1)[-1]:
+                    ours.add(k)
     cells, seen = [], set()
     for m in methods:
         key = (m["inst"], m["sel"])
         if key in seen:
             continue
         seen.add(key)
-        status = "unrated" if f"{m['inst']}|{m['sel']}" in answered else "missing"
+        k = f"{m['inst']}|{m['sel']}"
+        status = "missing" if k not in answered else "unrated" if (k in ours or not any("owner" in v for v in dump["classes"].values())) else "inherited"
         note = ev = ""
         r = ratings.get(p, {})
         r = r.get(m["sel"]) or r.get("*")
         if r:
-            if status == "missing":
-                warnings.append(f"ignored rating on missing {p} {m['sel']}")
+            if status in ("missing", "inherited"):
+                warnings.append(f"ignored rating on {status} {p} {m['sel']}")
             elif r.get("status") in RATED:
                 status, note, ev = r["status"], r.get("note", ""), r.get("evidence", "")
             else:
