@@ -16,7 +16,7 @@ Only open problems are listed here. What has been fixed and measured is in [docs
 | A second H.264 encode session is refused | The encoder library allows one engine per process and keeps it reserved until the session object is released (`CFRelease`; `VTCompressionSessionInvalidate` alone is not enough). A second hardware session while the first is open fails with -12908 ("engine already in use in this process"). Upstream #206 reports the same on an RTX 2070 Super. | VM-tested on Turing |
 | The encoder needs about 33 MiB (1080p) to 81 MiB (4K) of BAR1 unless built with `--low-bar` | The library maps its working buffers through the BAR1 window and zero-fills them. On a card with a 256 MB BAR1 and a busy desktop the map can fail and the session fails with -12908 ("engine bring-up failed"). `make_nvenc_t2d.py --low-bar` releases the windows after the zero-fill (see docs/H264.md); the peak while a session opens is still about 17 MB at 1080p and 67 MB at 4K. | VM-tested on Turing |
 | Bitrate control is opt-in | Without `NVMTL_VT_RC=1` the encoder runs at constant QP 23 and ignores `AverageBitRate` (about 12 Mbit/s at 1080p on the synthetic clip, far more on noisy content). The controller holds a requested bitrate in short tests; it has not been run on varied content, at other resolutions or on other cards. | VM-tested on Turing |
-| HEVC encode is off | Upstream reports a bitstream problem separate from the tiling one. | not tested here |
+| HEVC is experimental and opt-in | Tiling plus disabling sign data hiding fixes the baseline (four sizes, 44.3–44.7 dB mean Y PSNR). Optional speed patches and HEVC bitrate-control wiring need GPU validation; see docs/HEVC.md. | baseline VM-tested on Turing; new optimization hardware checks pending |
 | The encoder is registered in every process that makes a Metal device | That includes `ScreensharingAgent` and `loginwindow`, so a bad encoder would show up in screen sharing too. | read from logs, VM |
 | Only one encoder library build is supported | `tools/make_nvenc_t2d.py` refuses any build other than the 2.2.0 `libnvenc_h264.dylib`; the 2.3.6 package ships the same bytes. | VM-tested on Turing |
 | No display connected at boot means no GPU desktop | With 0 connected displays NVRMFB refuses to start framebuffer 0 and WindowServer renders in software until the next boot with a display. A dummy plug fixes it. | VM-tested on Turing |
@@ -48,7 +48,10 @@ Roughly in order of value per effort. "Hardware" means it needs a real card and 
    stays opt-in is written down. Needs: hardware.
 5. **A repeatable H.264 benchmark and a Linux comparison.** `tools/bench_nvenc_h264.py` measures this side; the
    comparison needs the same card under Linux (ffmpeg `h264_nvenc`). Done when both numbers are in `docs/H264.md`.
-6. **HEVC encode.** Find the second bitstream problem. Needs: hardware.
+6. **HEVC optimization and bitrate control.** The sign-hiding fix passes the baseline quality checks.
+   Validate each optional speed flag and the combination on the GPU, compare against the idle baseline, then
+   measure bitrate convergence and decode correctness with changing QP. Finish with a real game stream.
+   Needs: an idle GPU and a pause in the current stream; see docs/HEVC.md.
 7. **Ampere/Ada encode.** Upstream issue #65 measured the classic layout at 42-49 dB on an RTX 3070 Laptop with a
    similar change. The gate is Turing-only. Needs: a tester with the card.
 8. **Native encoder (research, architectural: ask first).** Today's encoder is upstream's closed binary with a patch.
@@ -62,3 +65,15 @@ Roughly in order of value per effort. "Hardware" means it needs a real card and 
 11. **CI.** The `tools/test_*.py` tests mostly need macOS and are not run by anything. A macOS runner that runs the
     ones that need no GPU would catch regressions. Adding CI is a dependency decision: ask first.
 12. **Pascal research note.** Whether the kernel side can work without GSP firmware. Research only, no code.
+
+## First non-prerelease target
+
+The release target is playable native macOS No Man's Sky and a small model running in llama.cpp on the GPU.
+Launching either process alone does not satisfy the target. Record the card, OS, settings/model, rendering or
+inference correctness, performance and stability. For llama.cpp, compare with CPU output.
+
+Current game observations on the RTX 2060 Super VM: Factorio fails during mipmap staging with a buffer-map
+allocation error after more than 127,000 live buffers; investigate buffer lifetime and allocation pressure.
+KSP reaches atmospheric flight through OpenGL 4.1 but has low performance, disabled shader caching and BC7
+decompression warnings. No Man's Sky launches and reaches shader translation; gameplay is not yet verified.
+These observations are baselines, not release qualification. llama.cpp remains untested.
