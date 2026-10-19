@@ -2559,6 +2559,17 @@ int nvmtl_vk_bind_buffer_offset(nvk_cmdbuf *c, uint32_t set, uint32_t index, siz
 #define NVMTL_TABLE_BYTES ((2 * NVMTL_NBUF + NVMTL_NTEX) * sizeof(uint64_t))
 typedef struct nvmtl_address_page { nvk_buffer buffer; struct nvmtl_address_page *next; } nvmtl_address_page;
 #define NVMTL_KEEP 256
+// Each kept command pool holds mapped NVK buffers and each kept address page is one mapped buffer, and every live
+// mapping is one NVRM client of the 4096 a process may hold (kNvClientsPerPid). 256 kept pools reached that limit
+// in Factorio, so the number kept is small by default; NVMTL_POOL_KEEP overrides it (0..256).
+#define NVMTL_KEEP_DEFAULT 16
+static unsigned nvmtl_keep_limit(void)
+{
+    static int lim = -1;
+    if (lim < 0) { const char *e = getenv("NVMTL_POOL_KEEP"); int v = e ? atoi(e) : NVMTL_KEEP_DEFAULT;
+        lim = v < 0 ? 0 : v > NVMTL_KEEP ? NVMTL_KEEP : v; }
+    return (unsigned)lim;
+}
 static pthread_mutex_t g_keep_lock = PTHREAD_MUTEX_INITIALIZER;
 static VkCommandPool g_keep_pool[NVMTL_KEEP]; static unsigned g_keep_npool;
 static nvmtl_address_page *g_keep_page[NVMTL_KEEP]; static unsigned g_keep_npage;
@@ -2568,7 +2579,7 @@ static int nvmtl_keep_on(void)
     if (on < 0) {
         const char *e = getenv("NVMTL_POOL_REUSE");
         on = (!e || e[0] == '1') && getenv("NVMTL_NO_POOL_REUSE") == NULL;
-        if (on) nvlog("vk: pool reuse ON (witness-guarded default) - empty command pools and address pages kept (<= %d), reused only on THE WITNESS", NVMTL_KEEP);
+        if (on) nvlog("vk: pool reuse ON (witness-guarded default) - empty command pools and address pages kept (<= %u, NVMTL_POOL_KEEP), reused only on THE WITNESS", nvmtl_keep_limit());
         else nvlog("vk: pool reuse OFF by environment - command pools and address pages are created and destroyed per commit");
     }
     return on;
@@ -2584,7 +2595,7 @@ static int nvmtl_keep_pool_push(VkCommandPool p)
 {
     int kept = 0;
     if (!nvmtl_keep_on()) return 0;
-    pthread_mutex_lock(&g_keep_lock); if (g_keep_npool < NVMTL_KEEP) { g_keep_pool[g_keep_npool++] = p; kept = 1; } pthread_mutex_unlock(&g_keep_lock);
+    pthread_mutex_lock(&g_keep_lock); if (g_keep_npool < nvmtl_keep_limit()) { g_keep_pool[g_keep_npool++] = p; kept = 1; } pthread_mutex_unlock(&g_keep_lock);
     return kept;
 }
 static nvmtl_address_page *nvmtl_keep_page_pop(void)
@@ -2598,7 +2609,7 @@ static int nvmtl_keep_page_push(nvmtl_address_page *p)
 {
     int kept = 0;
     if (!nvmtl_keep_on()) return 0;
-    pthread_mutex_lock(&g_keep_lock); if (g_keep_npage < NVMTL_KEEP) { p->next = NULL; g_keep_page[g_keep_npage++] = p; kept = 1; } pthread_mutex_unlock(&g_keep_lock);
+    pthread_mutex_lock(&g_keep_lock); if (g_keep_npage < nvmtl_keep_limit()) { p->next = NULL; g_keep_page[g_keep_npage++] = p; kept = 1; } pthread_mutex_unlock(&g_keep_lock);
     return kept;
 }
 #define NVMTL_WIT_SLOTS 4096u
