@@ -36,9 +36,10 @@ Roughly in order of value per effort. "Hardware" means it needs a real card and 
 2. **Let a second session open.** Decide between a plugin-side workaround (release the first session when a second is
    requested), another binary patch, or documenting why not (the 2060 Super has one NVENC engine). Done when
    `tools/test_nvenc_h264.py --overlap-required` passes, or `docs/H264.md` says why it cannot. Needs: hardware.
-3. **Make the encoder cheaper on CPU.** At 1080p one frame costs 3.6 ms of CPU, equal to its wall time, so one core is
-   the limit (277 fps at 1080p). Suspect the CPU writing the tiled frame through the BAR1 mapping; a GPU copy would
-   remove it. Done when `tools/bench_nvenc_h264.py` shows CPU ms/frame well below wall ms/frame. Needs: hardware.
+3. **Make the encoder cheaper on CPU.** Opt-in `--direct-row` and `--short-zero` already cut idle-VM CPU at 1080p from
+   about 2.3 ms to 2.2 (`--direct-row`), 2.1 (`--short-zero`) and 1.9 together (table in docs/H264.md); they do not separate CPU time from wall time. Suspect the
+   remaining cost is the CPU writing the tiled frame through the BAR1 mapping; a GPU copy would remove it. Done when
+   `tools/bench_nvenc_h264.py` shows CPU ms/frame well below wall ms/frame. Needs: hardware.
 4. **Validate bitrate control and decide its default.** Run `NVMTL_VT_RC=1` on real content (games, video, text) at
    720p to 4K and several client bitrates; record bitrate error and visible quality (PSNR with
    `tools/nvenc_psnr.m`). Done when the results are in `docs/H264.md` and the default is changed, or the reason it

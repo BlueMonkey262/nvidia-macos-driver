@@ -29,7 +29,18 @@ buffer except the 512 KB USERD slot and clear that descriptor's CPU-pointer fiel
 them again. Flag-1 buffers and USERD stay mapped. The new instructions (LOW_BAR_ASM, embedded as bytes) go into the
 padding at 0x9ee0; with objdump on PATH they are checked before they are written.
 
-usage: make_nvenc_t2d.py [--keep-multi-ref] [--low-bar] <libnvenc_h264.dylib> <out libnvenc_h264_t2d.dylib>
+Optional --direct-row (off unless named): skip the per-row memcpy into the staging buffer when the edge pad
+length is zero (width a multiple of 16). The t2d loops then read the source row directly. Rows that still need
+padding keep the original memcpy + edge fill. Hooks replace the memcpy calls and the row-loop heads; caves sit
+in the padding after the t2d loops and (when --low-bar is also used) after the low-bar cave. Apply --low-bar in
+the same run when both are wanted: a later --low-bar refuses padding that is no longer empty.
+
+Optional --short-zero (off unless named): the status-buffer bzero every frame uses a 4096-byte length instead of
+the full 6.88 MB mapping. The CPU only reads the status header after the wait; a too-short clear would show up as
+a channel error or a bad picture, not a silently good stream.
+
+usage: make_nvenc_t2d.py [--keep-multi-ref] [--low-bar] [--direct-row] [--short-zero]
+                         <libnvenc_h264.dylib> <out libnvenc_h264_t2d.dylib>
 """
 import hashlib
 import os
@@ -119,7 +130,44 @@ LOW_BAR_CAVE = bytes.fromhex(
     "e96d9bffff")
 
 
+# --direct-row. Pad length is [rbp-0x308] == (mb_w*16 - width). Zero pad tiles from the source row;
+# otherwise the original memcpy + edge fill runs. Both paths stash the staging pointer at [rbp-0x330]
+# (rsp after the frame setup); the row-loop heads restore it before the next iteration.
+LUMA_CALL, CHROMA_CALL = 0x6375, 0x648F
+LUMA_RESUME, CHROMA_RESUME = 0x6330, 0x6450
+LUMA_TILE, CHROMA_TILE = 0x639A, 0x64BE       # t2d entry (or original loop) after a direct skip
+LUMA_AFTER_COPY, CHROMA_AFTER_COPY = 0x637A, 0x6494
+LUMA_RESUME_CONT, CHROMA_RESUME_CONT = 0x6337, 0x6457
+MEMCPY = 0x8372
+LUMA_CALL_OLD = bytes.fromhex("e8f81f0000")    # call memcpy
+CHROMA_CALL_OLD = bytes.fromhex("e8de1e0000")
+RESUME_OLD = bytes.fromhex("41ffc4418b")      # inc r12d; start of mov eax, ...
+# The four caves below sit at 0x9e0a / 0x9eab / 0x9f36 / 0x9f49. Their instructions, as objdump decodes the bytes
+# (tools/test_h264_perf_patch.py decodes them again and checks every jump lands on an instruction start):
+#   luma   0x9e0a: mov [rbp-0x330],r14 ; cmp qword [rbp-0x308],0 ; jne +copy ; mov r14,r15 ;
+#                  mov r15,[rbp-0x2b8] ; jmp 0x639a (t2d entry)        +copy: call memcpy(0x8372) ; jmp 0x637a
+#   chroma 0x9eab: mov [rbp-0x330],r14 ; cmp qword [rbp-0x308],0 ; jne +copy ; mov r14,r15 ;
+#                  jmp 0x64be (t2d entry)                               +copy: call memcpy(0x8372) ; jmp 0x6494
+#   luma restore   0x9f36: mov r14,[rbp-0x330] ; inc r12d ; mov eax,[r15+0xc] ; jmp 0x6337
+#   chroma restore 0x9f49: mov r14,[rbp-0x330] ; inc r12d ; mov eax,[r9+0xc]  ; jmp 0x6457
+LUMA_DIRECT = bytes.fromhex(
+    "4c89b5d0fcffff4883bdf8fcffff00750f4d89fe4c8bbd48fdffffe970c5ffffe843e5ffffe946c5ffff")
+CHROMA_DIRECT = bytes.fromhex(
+    "4c89b5d0fcffff4883bdf8fcffff0075084d89fee9fac5ffffe8a9e4ffffe9c6c5ffff")
+LUMA_RESTORE = bytes.fromhex("4c8bb5d0fcffff41ffc4418b470ce9eec3ffff")
+CHROMA_RESTORE = bytes.fromhex("4c8bb5d0fcffff41ffc4418b410ce9fbc4ffff")
+DIRECT_AT = (0x9E0A, 0x9EAB, 0x9F36, 0x9F49)  # luma, chroma, luma restore, chroma restore
+DIRECT_BLOBS = (LUMA_DIRECT, CHROMA_DIRECT, LUMA_RESTORE, CHROMA_RESTORE)
+
+# --short-zero. Same length as the load of the rounded status-buffer size (6,881,280).
+SHORT_AT = 0x6A07
+SHORT_OLD = bytes.fromhex("488b35a2480000")   # mov rsi, [rip+0xb2b0]
+SHORT_NEW = bytes.fromhex("be001000006690")   # mov esi, 0x1000; nop
+
+
 _INSN = re.compile(r"^\s*([0-9a-f]+):\t([0-9a-f ]*?)\t(\S+)\s*(.*?)\s*$")
+# objdump puts a long immediate on its own address line with hex only (no mnemonic).
+_INSN_CONT = re.compile(r"^\s*[0-9a-f]+:\t([0-9a-f ]+)\s*$")
 
 
 def disassemble(blob, vma, start=None, stop=None):
@@ -140,11 +188,15 @@ def disassemble(blob, vma, start=None, stop=None):
     rows = []
     for line in out.stdout.splitlines():
         m = _INSN.match(line)
-        if not m:
+        if m:
+            addr = int(m.group(1), 16)
+            raw = bytes.fromhex(m.group(2))
+            rows.append((addr, raw, m.group(3), m.group(4)))
             continue
-        addr = int(m.group(1), 16)
-        raw = bytes.fromhex(m.group(2))
-        rows.append((addr, raw, m.group(3), m.group(4)))
+        c = _INSN_CONT.match(line)
+        if c and rows:
+            addr, raw, mnem, ops = rows[-1]
+            rows[-1] = (addr, raw + bytes.fromhex(c.group(1)), mnem, ops)
     return rows, out.stdout
 
 
@@ -212,8 +264,87 @@ def apply_low_bar(data):
     return text
 
 
-def patch(data, single_ref=True, low_bar=False):
-    """Apply the t2d loops, the single-reference clamps, and (if asked) the BAR1 unmap."""
+def _jmp(at, target):
+    return b"\xe9" + struct.pack("<i", target - (at + 5))
+
+
+def _need(data, at, old, what):
+    got = bytes(data[at:at + len(old)])
+    if got != old:
+        raise SystemExit(f"unexpected bytes at {at:#x} ({what}): {got.hex()} wanted {old.hex()}")
+
+
+def verify_direct_row_caves():
+    """With objdump on PATH: refuse the caves unless they decode and every transfer lands where it must."""
+    if not shutil.which("objdump"):
+        return None
+    listings = []
+    expected = {
+        DIRECT_AT[0]: (("jne", None), ("jmp", LUMA_TILE), ("call", MEMCPY), ("jmp", LUMA_AFTER_COPY)),
+        DIRECT_AT[1]: (("jne", None), ("jmp", CHROMA_TILE), ("call", MEMCPY), ("jmp", CHROMA_AFTER_COPY)),
+        DIRECT_AT[2]: (("jmp", LUMA_RESUME_CONT),),
+        DIRECT_AT[3]: (("jmp", CHROMA_RESUME_CONT),),
+    }
+    for at, blob in zip(DIRECT_AT, DIRECT_BLOBS):
+        rows, text = disassemble(blob, at)
+        if any(m == "(bad)" or m == "" for _, _, m, _ in rows):
+            raise SystemExit(f"direct-row cave at {at:#x} did not decode:\n" + text)
+        covered = b"".join(raw for _, raw, _, _ in rows)
+        if covered != blob:
+            raise SystemExit(f"objdump did not cover every byte of the cave at {at:#x}")
+        starts = {addr for addr, _, _, _ in rows}
+        transfers = []
+        for addr, _, mnem, ops in rows:
+            if mnem.startswith("j") or mnem == "call":
+                tgt = _abs_target(ops)
+                if tgt is None:
+                    raise SystemExit(f"no target on {mnem} at {addr:#x}")
+                transfers.append((mnem, tgt))
+                # Conditional skip must land inside this cave (the slow path).
+                if mnem.startswith("j") and mnem not in ("jmp",) and tgt not in starts:
+                    raise SystemExit(f"{mnem} at {addr:#x} -> {tgt:#x}, not inside the cave")
+        want = list(expected[at])
+        got = list(transfers)
+        if len(got) != len(want):
+            raise SystemExit(f"cave at {at:#x} transfers {got}, wanted {len(want)}:\n" + text)
+        for (gm, gt), (wm, wt) in zip(got, want):
+            if gm != wm or (wt is not None and gt != wt):
+                raise SystemExit(f"cave at {at:#x}: got {gm} {gt:#x}, wanted {wm} "
+                                 f"{'any' if wt is None else f'{wt:#x}'}:\n" + text)
+        listings.append(text)
+    return "\n".join(listings)
+
+
+def apply_direct_row(data):
+    """Skip the per-row memcpy when the edge pad is zero. `data` is the library image."""
+    verify_direct_row_caves()
+    _need(data, LUMA_CALL, LUMA_CALL_OLD, "luma memcpy")
+    _need(data, CHROMA_CALL, CHROMA_CALL_OLD, "chroma memcpy")
+    _need(data, LUMA_RESUME, RESUME_OLD, "luma row loop")
+    _need(data, CHROMA_RESUME, RESUME_OLD, "chroma row loop")
+    for at, blob in zip(DIRECT_AT, DIRECT_BLOBS):
+        if any(data[at:at + len(blob)]):
+            raise SystemExit(f"padding at {at:#x} is not empty (direct-row)")
+    for at, blob in zip(DIRECT_AT, DIRECT_BLOBS):
+        data[at:at + len(blob)] = blob
+    data[LUMA_CALL:LUMA_CALL + 5] = _jmp(LUMA_CALL, DIRECT_AT[0])
+    data[CHROMA_CALL:CHROMA_CALL + 5] = _jmp(CHROMA_CALL, DIRECT_AT[1])
+    data[LUMA_RESUME:LUMA_RESUME + 5] = _jmp(LUMA_RESUME, DIRECT_AT[2])
+    data[CHROMA_RESUME:CHROMA_RESUME + 5] = _jmp(CHROMA_RESUME, DIRECT_AT[3])
+
+
+def apply_short_zero(data):
+    """bzero only the first 4096 bytes of the status buffer. Same length as the size load it replaces."""
+    _need(data, SHORT_AT, SHORT_OLD, "status bzero size")
+    data[SHORT_AT:SHORT_AT + len(SHORT_NEW)] = SHORT_NEW
+
+
+def patch(data, single_ref=True, low_bar=False, direct_row=False, short_zero=False):
+    """Apply the t2d loops, the single-reference clamps, and any named optional patches.
+
+    --low-bar runs before --direct-row so the low-bar cave can claim empty padding at 0x9ee0;
+    the direct-row restore stubs sit immediately after that cave.
+    """
     if not hashlib.sha256(data).hexdigest().startswith(KNOWN):
         raise SystemExit(f"not the known encoder ({KNOWN}...): read the loops again before patching")
     for hook in (LUMA, CHROMA):
@@ -233,17 +364,24 @@ def patch(data, single_ref=True, low_bar=False):
     listing = None
     if low_bar:
         listing = apply_low_bar(data)
+    if short_zero:
+        apply_short_zero(data)
+    if direct_row:
+        apply_direct_row(data)
     return listing
 
 
-def main(src, dst, single_ref=True, low_bar=False):
+def main(src, dst, single_ref=True, low_bar=False, direct_row=False, short_zero=False):
     data = bytearray(open(src, "rb").read())
-    listing = patch(data, single_ref=single_ref, low_bar=low_bar)
+    listing = patch(data, single_ref=single_ref, low_bar=low_bar,
+                    direct_row=direct_row, short_zero=short_zero)
     with open(dst, "wb") as f:
         f.write(data)
     print(f"wrote {dst}: luma and chroma tiling loops now write the t2d / block height 2 layout"
           + ("; P-frames use one reference frame" if single_ref else "; P-frames keep up to three references")
-          + ("; flag-0 BAR1 windows dropped after zero-fill (USERD kept)" if low_bar else ""))
+          + ("; flag-0 BAR1 windows dropped after zero-fill (USERD kept)" if low_bar else "")
+          + ("; row memcpy skipped when width needs no edge pad" if direct_row else "")
+          + ("; status buffer zeroed for 4096 bytes only" if short_zero else ""))
     if listing:
         hook, _ = disassemble(data[LOW_BAR_HOOK:LOW_BAR_HOOK + 8], LOW_BAR_HOOK)
         print(f"\npatched buf_alloc {LOW_BAR_HOOK:#x}:")
@@ -256,10 +394,12 @@ def main(src, dst, single_ref=True, low_bar=False):
 
 
 if __name__ == "__main__":
-    flags = {"--keep-multi-ref", "--low-bar"}
+    flags = {"--keep-multi-ref", "--low-bar", "--direct-row", "--short-zero"}
     args = [a for a in sys.argv[1:] if a not in flags]
     if len(args) != 2 or any(a.startswith("-") and a not in flags for a in sys.argv[1:]):
         raise SystemExit(__doc__)
     main(args[0], args[1],
          single_ref="--keep-multi-ref" not in sys.argv,
-         low_bar="--low-bar" in sys.argv)
+         low_bar="--low-bar" in sys.argv,
+         direct_row="--direct-row" in sys.argv,
+         short_zero="--short-zero" in sys.argv)
