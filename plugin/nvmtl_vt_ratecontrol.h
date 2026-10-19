@@ -8,7 +8,8 @@
 #include <stdint.h>
 
 /* The closed encoder stores a QP at session+0x64 (CreateInstance writes 23) and
- * reloads it on every EncodeFrame. nve264_encode then clamps to 0..51. This
+ * reloads it on every EncodeFrame. Both nve264_encode and nve265_encode clamp
+ * it to 0..51. The HEVC Quality setter uses the same conversion below. This
  * controller stays in a narrower band: low enough that a static desktop is not
  * driven into mush, high enough that a busy 1080p frame can still hit a
  * typical stream target. Nothing here talks to VideoToolbox. */
@@ -92,7 +93,7 @@ static int nvmtl_vt_rc_update(nvmtl_vt_rc *rc, uint32_t frame_bytes, int is_idr)
 
 /* Inverse of the library's SetProperty(Quality) conversion,
  *   qp = trunc(quality * -41 + 51 + 0.5)
- * (doubles -41, 51 and 0.5 at file offsets 0x83c0, 0x83c8, 0x83d0).
+ * (H.264 doubles at 0x83c0, 0x83c8, 0x83d0; HEVC at 0xac60, 0xac68, 0xac70).
  * The value sits 0.25 above the integer so a rounding error in the double
  * cannot fall into the next bin. Checked for every QP in [18, 40] by the
  * host test. Not sent to a session from here. */

@@ -11,9 +11,12 @@
 // and refuses (upstream issue #206), so the lookup fails with -12908 (kVTCouldNotFindVideoEncoderErr) and ffmpeg gives up.
 // The dictionary does not depend on the session, so it is fetched once right before the first hardware H.264 session is
 // created (no session open yet) and served from the cache when a later lookup fails that way.
+// HEVC is the same two calls: ffmpeg's hevc_videotoolbox adds EnableLowLatencyRateControl too, and VideoToolbox refuses it on a
+// GPU that is not Apple's (-12902). Both codecs are handled; H.264 and HEVC registration each call nvmtl_vt_spec_hook_install,
+// which still runs once.
 // NVMTL_NO_VT_SPEC_HOOK=1 turns it off.
 // Third part, opt-in with NVMTL_VT_RC=1: bitrate control. The encoder library runs at a constant QP and ignores
-// AverageBitRate, but it re-reads its QP for every frame and SetProperty(Quality) writes it. For a hardware H.264 session
+// AverageBitRate, but it re-reads its QP for every frame and SetProperty(Quality) writes it. For a hardware H.264 or HEVC session
 // the output callback is wrapped to see every encoded frame's size, nvmtl_vt_ratecontrol.h turns those sizes and the
 // AverageBitRate / ExpectedFrameRate seen through a rebind of VTSessionSetProperty into the next QP, and the quality for
 // it is set through the original VTSessionSetProperty (so it does not pass through the hook again).
@@ -102,54 +105,59 @@ static int32_t nvmtl_vt_setprop_hook(CFTypeRef session, CFStringRef key, CFTypeR
 static CFDictionaryRef nvmtl_vt_spec_without_lowlatency(uint32_t codec, CFDictionaryRef spec)
 {
     if (!spec) return NULL;
-    if (codec != 'avc1' || !CFDictionaryContainsKey(spec, CFSTR("EnableLowLatencyRateControl"))) return CFRetain(spec);
+    if ((codec != 'avc1' && codec != 'hvc1') || !CFDictionaryContainsKey(spec, CFSTR("EnableLowLatencyRateControl"))) return CFRetain(spec);
     CFMutableDictionaryRef m = CFDictionaryCreateMutableCopy(NULL, 0, spec);
     if (!m) return CFRetain(spec);   // out of memory: pass the original on rather than crash
     CFDictionaryRemoveValue(m, CFSTR("EnableLowLatencyRateControl"));
-    nvlog("nvenc: dropped EnableLowLatencyRateControl from an H.264 specification in %s", getprogname());
+    nvlog("nvenc: dropped EnableLowLatencyRateControl from an %s specification in %s", codec == 'hvc1' ? "HEVC" : "H.264", getprogname());
     return m;
 }
-// The supported-property dictionaries of our encoder, one per frame size (what the encoder reports can depend on it).
+// The supported-property dictionaries of our encoders, one per codec ('avc1' H.264, 'hvc1' HEVC) and frame size (what the
+// encoder reports can depend on both), so a failed HEVC lookup can never be answered with the H.264 dictionary.
 enum { NVMTL_VT_CACHE_ENTRIES = 8 };
 static pthread_mutex_t g_vt_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_vt_prime_lock = PTHREAD_MUTEX_INITIALIZER;   // one priming lookup at a time (the engine is one per process)
-static struct { int32_t w, h; CFStringRef id; CFDictionaryRef props; } g_vt_cache[NVMTL_VT_CACHE_ENTRIES];
+static struct { uint32_t codec; int32_t w, h; CFStringRef id; CFDictionaryRef props; } g_vt_cache[NVMTL_VT_CACHE_ENTRIES];
 static unsigned g_vt_cache_next;
 enum { NVMTL_VT_COULD_NOT_FIND_ENCODER = -12908 };
 
-// The index of the entry for this size, or -1. Call with g_vt_cache_lock held.
-static int nvmtl_vt_cache_find(int32_t w, int32_t h)
+static bool nvmtl_vt_codec_cached(uint32_t codec) { return codec == 'avc1' || codec == 'hvc1'; }
+// The index of the entry for this codec and size, or -1. Call with g_vt_cache_lock held.
+static int nvmtl_vt_cache_find(uint32_t codec, int32_t w, int32_t h)
 {
-    for (int i = 0; i < NVMTL_VT_CACHE_ENTRIES; i++) if (g_vt_cache[i].props && g_vt_cache[i].w == w && g_vt_cache[i].h == h) return i;
+    for (int i = 0; i < NVMTL_VT_CACHE_ENTRIES; i++)
+        if (g_vt_cache[i].props && g_vt_cache[i].codec == codec && g_vt_cache[i].w == w && g_vt_cache[i].h == h) return i;
     return -1;
 }
-// Keep the answer when it came from our encoder; a later answer for the same size replaces the earlier one.
-static void nvmtl_vt_cache_store(int32_t w, int32_t h, CFStringRef encoderID, CFDictionaryRef props)
+// Keep the answer when it came from our encoder for this codec; a later answer for the same codec and size replaces the earlier one.
+static void nvmtl_vt_cache_store(uint32_t codec, int32_t w, int32_t h, CFStringRef encoderID, CFDictionaryRef props)
 {
-    if (!encoderID || !props || CFStringCompare(encoderID, CFSTR("com.nvmtl.videoencoder.avc.nvenc"), 0) != kCFCompareEqualTo) return;
+    if (!nvmtl_vt_codec_cached(codec) || !encoderID || !props) return;
+    CFStringRef want = codec == 'hvc1' ? CFSTR("com.nvmtl.videoencoder.hevc.nvenc") : CFSTR("com.nvmtl.videoencoder.avc.nvenc");
+    if (CFStringCompare(encoderID, want, 0) != kCFCompareEqualTo) return;
     CFRetain(encoderID); CFRetain(props);
     pthread_mutex_lock(&g_vt_cache_lock);
-    int i = nvmtl_vt_cache_find(w, h);
+    int i = nvmtl_vt_cache_find(codec, w, h);
     if (i < 0) i = (int)(g_vt_cache_next++ % NVMTL_VT_CACHE_ENTRIES);
     CFStringRef old_id = g_vt_cache[i].id; CFDictionaryRef old_props = g_vt_cache[i].props;
-    g_vt_cache[i].w = w; g_vt_cache[i].h = h; g_vt_cache[i].id = encoderID; g_vt_cache[i].props = props;
+    g_vt_cache[i].codec = codec; g_vt_cache[i].w = w; g_vt_cache[i].h = h; g_vt_cache[i].id = encoderID; g_vt_cache[i].props = props;
     pthread_mutex_unlock(&g_vt_cache_lock);
     if (old_id) CFRelease(old_id);
     if (old_props) CFRelease(old_props);
 }
-// One lookup for each frame size, made right before a hardware H.264 session of that size is created (no session open yet).
+// One lookup for each codec and frame size, made right before a hardware session of that kind is created (no session open yet).
 static void nvmtl_vt_cache_prime(int32_t w, int32_t h, uint32_t codec, CFDictionaryRef spec)
 {
-    if (codec != 'avc1' || !spec || !g_vt_props_orig) return;
+    if (!nvmtl_vt_codec_cached(codec) || !spec || !g_vt_props_orig) return;
     pthread_mutex_lock(&g_vt_prime_lock);   // two creates at once do not both ask the encoder
     pthread_mutex_lock(&g_vt_cache_lock);
-    const bool have = nvmtl_vt_cache_find(w, h) >= 0;
+    const bool have = nvmtl_vt_cache_find(codec, w, h) >= 0;
     pthread_mutex_unlock(&g_vt_cache_lock);
     if (!have) {
         CFStringRef id = NULL; CFDictionaryRef props = NULL;
         int32_t pr = g_vt_props_orig(w, h, codec, spec, &id, &props);
-        nvlog("nvenc: primed the supported-property cache in %s: %dx%d -> %d", getprogname(), (int)w, (int)h, (int)pr);
-        if (pr == 0) nvmtl_vt_cache_store(w, h, id, props);
+        nvlog("nvenc: primed the %s supported-property cache in %s: %dx%d -> %d", codec == 'hvc1' ? "HEVC" : "H.264", getprogname(), (int)w, (int)h, (int)pr);
+        if (pr == 0) nvmtl_vt_cache_store(codec, w, h, id, props);
         if (id) CFRelease(id);
         if (props) CFRelease(props);
     }
@@ -162,12 +170,12 @@ static int32_t nvmtl_vt_create_hook(CFAllocatorRef a, int32_t w, int32_t h, uint
     nvmtl_vt_cache_prime(w, h, codec, s);
     nvmtl_vt_rcs *ctx = NULL;
     void *use_cb = cb, *use_ref = refcon;
-    if (g_rc_enabled && codec == 'avc1' && cb && out) {
+    if (g_rc_enabled && nvmtl_vt_codec_cached(codec) && cb && out) {
         ctx = (nvmtl_vt_rcs *)calloc(1, sizeof *ctx);
         if (ctx) { ctx->cb = (nvmtl_vt_out_cb)cb; ctx->refcon = refcon; use_cb = (void *)nvmtl_vt_rc_output; use_ref = ctx; }
     }
     int32_t r = g_vt_create_orig(a, w, h, codec, s, attrs, ca, use_cb, use_ref, out);
-    if (codec == 'avc1') nvlog("nvenc: VTCompressionSessionCreate %dx%d in %s -> %d", (int)w, (int)h, getprogname(), (int)r);
+    if (nvmtl_vt_codec_cached(codec)) nvlog("nvenc: VTCompressionSessionCreate %dx%d %s in %s -> %d", (int)w, (int)h, codec == 'hvc1' ? "HEVC" : "H.264", getprogname(), (int)r);
     if (s) CFRelease(s);
     if (ctx) {
         CFTypeRef session = r == 0 ? *(CFTypeRef *)out : NULL;
@@ -183,7 +191,8 @@ static int32_t nvmtl_vt_create_hook(CFAllocatorRef a, int32_t w, int32_t h, uint
             if (g_rcs[slot]) g_rcs[slot]->active = 0;
             ctx->session = session; ctx->active = 1; g_rcs[slot] = ctx;
             pthread_mutex_unlock(&g_rcs_lock);
-            nvlog("nvenc: bitrate control on for a %dx%d hardware session in %s", (int)w, (int)h, getprogname());
+            nvlog("nvenc: bitrate control on for a %dx%d %s hardware session in %s", (int)w, (int)h,
+                  codec == 'hvc1' ? "HEVC" : "H.264", getprogname());
         }
         if (hw) CFRelease(hw);
         // The context is never freed: the session may still deliver a frame to it after a failed or finished create, and a
@@ -197,12 +206,12 @@ static int32_t nvmtl_vt_props_hook(int32_t w, int32_t h, uint32_t codec, CFDicti
     CFDictionaryRef s = nvmtl_vt_spec_without_lowlatency(codec, spec);
     int32_t r = g_vt_props_orig(w, h, codec, s, idOut, propsOut);
     if (s) CFRelease(s);
-    if (codec == 'avc1') nvlog("nvenc: VTCopySupportedPropertyDictionaryForEncoder %dx%d in %s -> %d", (int)w, (int)h, getprogname(), (int)r);
-    if (r == 0) { if (codec == 'avc1' && idOut && *idOut && propsOut && *propsOut) nvmtl_vt_cache_store(w, h, *idOut, *propsOut); return r; }
-    if (r == NVMTL_VT_COULD_NOT_FIND_ENCODER && codec == 'avc1' && propsOut) {   // ffmpeg passes no encoder-ID output
-        // answered only from an entry for this very size: a different size keeps its error
+    if (nvmtl_vt_codec_cached(codec)) nvlog("nvenc: VTCopySupportedPropertyDictionaryForEncoder %dx%d %s in %s -> %d", (int)w, (int)h, codec == 'hvc1' ? "HEVC" : "H.264", getprogname(), (int)r);
+    if (r == 0) { if (nvmtl_vt_codec_cached(codec) && idOut && *idOut && propsOut && *propsOut) nvmtl_vt_cache_store(codec, w, h, *idOut, *propsOut); return r; }
+    if (r == NVMTL_VT_COULD_NOT_FIND_ENCODER && nvmtl_vt_codec_cached(codec) && propsOut) {   // ffmpeg passes no encoder-ID output
+        // answered only from an entry for this very codec and size: another size or codec keeps its error
         pthread_mutex_lock(&g_vt_cache_lock);
-        const int i = nvmtl_vt_cache_find(w, h);
+        const int i = nvmtl_vt_cache_find(codec, w, h);
         if (i >= 0) {
             if (idOut) *idOut = CFRetain(g_vt_cache[i].id);
             *propsOut = CFRetain(g_vt_cache[i].props);
