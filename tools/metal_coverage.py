@@ -6,7 +6,7 @@ usage: metal_coverage.py DUMP.json (--headers SDK/Metal.framework/Headers | --pu
        [-o OUT.html] [--svg OUT.svg] [--slim OUT.json]
 DUMP.json comes from tools/metal_coverage.m. A method is "implemented" when some NVMTL* class that conforms to its protocol
 answers the selector; that says nothing about whether it works. Colors:
-  gray    not implemented            red     implemented, very slow       yellow  needs improvement, good for now
+  gray    not implemented, or a stub (a method that does nothing useful)    red     implemented, very slow       yellow  needs improvement, good for now
   green   works great               purple  implemented, differs from Apple's result
   teal    answered by Apple's own Metal code (inherited), not by ours
   blue    implemented, not yet rated (the default for every implemented method; only metal-ratings.json can change it)
@@ -20,6 +20,7 @@ import sys
 
 STATUSES = ["missing", "inherited", "slow", "improve", "great", "differs", "unrated"]
 RATED = {"slow", "improve", "great", "differs"}
+STUB = "stub"  # a rating, not a color: the method exists but does nothing useful, so it is drawn as not implemented
 
 ap = argparse.ArgumentParser()
 ap.add_argument("dump")
@@ -72,6 +73,8 @@ for p, methods in protos.items():
                 warnings.append(f"ignored rating on {status} {p} {m['sel']}")
             elif r.get("status") in RATED:
                 status, note, ev = r["status"], r.get("note", ""), r.get("evidence", "")
+            elif r.get("status") == STUB:
+                status, note, ev = "missing", "Stub: " + r.get("note", ""), r.get("evidence", "")
             else:
                 warnings.append(f"bad status for {p} {m['sel']}: {r.get('status')}")
         cells.append({"s": m["sel"], "st": status, "req": bool(m["req"]), "n": note, "e": ev})
@@ -85,7 +88,7 @@ data = json.dumps({"groups": groups, "totals": totals, "total": total, "device":
 
 COLORS = {"missing": "#6b7280", "inherited": "#2fa6a0", "slow": "#dc2626", "improve": "#eab308", "great": "#22a559",
           "differs": "#9333ea", "unrated": "#4f78c4"}
-LABELS = {"missing": "Not implemented", "inherited": "Apple's code, not ours", "slow": "Very slow", "improve": "Needs improvement",
+LABELS = {"missing": "Not implemented or stub", "inherited": "Apple's code, not ours", "slow": "Very slow", "improve": "Needs improvement",
           "great": "Works great", "differs": "Differs from Apple", "unrated": "Not yet rated"}
 
 
@@ -127,7 +130,7 @@ def svg_map(groups, totals, total):
     done = total - totals["missing"]
     p = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H + TOP}" width="{W}" height="{H + TOP}" '
          f'font-family="sans-serif"><rect width="{W}" height="{H + TOP}" fill="#0f1218"/>',
-         f'<text x="6" y="22" font-size="16" font-weight="700" fill="#e6e9ef">Metal API coverage: {done}/{total} methods answered '
+         f'<text x="6" y="22" font-size="16" font-weight="700" fill="#e6e9ef">Metal API coverage: {done}/{total} methods implemented '
          f'({100 * done / total:.0f}%), {totals["inherited"]} of them by Apple\'s own code</text>']
     lx = 6
     for k in STATUSES:

@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 602" width="1200" height="602" font-family="sans-serif"><rect width="1200" height="602" fill="#0f1218"/>
-<text x="6" y="22" font-size="16" font-weight="700" fill="#e6e9ef">Metal API coverage: 776/901 methods answered (86%), 33 of them by Apple's own code</text>
-<rect x="6" y="36" width="12" height="12" fill="#6b7280"/><text x="23" y="47" font-size="12" fill="#c9ced8">Not implemented (125)</text>
-<rect x="184" y="36" width="12" height="12" fill="#2fa6a0"/><text x="201" y="47" font-size="12" fill="#c9ced8">Apple's code, not ours (33)</text>
-<rect x="404" y="36" width="12" height="12" fill="#dc2626"/><text x="421" y="47" font-size="12" fill="#c9ced8">Very slow (0)</text>
-<rect x="526" y="36" width="12" height="12" fill="#eab308"/><text x="543" y="47" font-size="12" fill="#c9ced8">Needs improvement (0)</text>
-<rect x="704" y="36" width="12" height="12" fill="#22a559"/><text x="721" y="47" font-size="12" fill="#c9ced8">Works great (0)</text>
-<rect x="840" y="36" width="12" height="12" fill="#9333ea"/><text x="857" y="47" font-size="12" fill="#c9ced8">Differs from Apple (0)</text>
-<rect x="1025" y="36" width="12" height="12" fill="#4f78c4"/><text x="1042" y="47" font-size="12" fill="#c9ced8">Not yet rated (743)</text>
-<g><title>MTLRenderCommandEncoder: Not implemented 8, Not yet rated 128</title>
+<text x="6" y="22" font-size="16" font-weight="700" fill="#e6e9ef">Metal API coverage: 776/901 methods implemented (86%), 33 of them by Apple's own code</text>
+<rect x="6" y="36" width="12" height="12" fill="#6b7280"/><text x="23" y="47" font-size="12" fill="#c9ced8">Not implemented or stub (125)</text>
+<rect x="240" y="36" width="12" height="12" fill="#2fa6a0"/><text x="257" y="47" font-size="12" fill="#c9ced8">Apple's code, not ours (33)</text>
+<rect x="460" y="36" width="12" height="12" fill="#dc2626"/><text x="477" y="47" font-size="12" fill="#c9ced8">Very slow (0)</text>
+<rect x="582" y="36" width="12" height="12" fill="#eab308"/><text x="599" y="47" font-size="12" fill="#c9ced8">Needs improvement (0)</text>
+<rect x="760" y="36" width="12" height="12" fill="#22a559"/><text x="777" y="47" font-size="12" fill="#c9ced8">Works great (0)</text>
+<rect x="896" y="36" width="12" height="12" fill="#9333ea"/><text x="913" y="47" font-size="12" fill="#c9ced8">Differs from Apple (0)</text>
+<rect x="1081" y="36" width="12" height="12" fill="#4f78c4"/><text x="1098" y="47" font-size="12" fill="#c9ced8">Not yet rated (743)</text>
+<g><title>MTLRenderCommandEncoder: Not implemented or stub 8, Not yet rated 128</title>
 <rect x="1.00" y="63.00" width="26.07" height="25.90" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="27.07" y="63.00" width="26.07" height="25.90" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="53.15" y="63.00" width="26.07" height="25.90" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -271,7 +271,7 @@
 <rect x="0.00" y="348.88" width="340.95" height="253.12" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="5.00" y="363.88" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Device</text>
 </g>
-<g><title>MTLTexture: Not implemented 2, Not yet rated 49</title>
+<g><title>MTLTexture: Not implemented or stub 2, Not yet rated 49</title>
 <rect x="341.95" y="63.00" width="25.59" height="25.06" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="367.54" y="63.00" width="25.59" height="25.06" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="393.14" y="63.00" width="25.59" height="25.06" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
@@ -326,7 +326,7 @@
 <rect x="340.95" y="62.00" width="181.13" height="202.50" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="345.95" y="77.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Texture</text>
 </g>
-<g><title>MTLComputeCommandEncoder: Not implemented 3, Not yet rated 43</title>
+<g><title>MTLComputeCommandEncoder: Not implemented or stub 3, Not yet rated 43</title>
 <rect x="341.95" y="265.50" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="367.54" y="265.50" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="393.14" y="265.50" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
@@ -419,7 +419,7 @@
 <rect x="340.95" y="447.15" width="181.13" height="154.85" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="345.95" y="462.15" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">CommandBuffer</text>
 </g>
-<g><title>MTLBlitCommandEncoder: Not implemented 2, Not yet rated 30</title>
+<g><title>MTLBlitCommandEncoder: Not implemented or stub 2, Not yet rated 30</title>
 <rect x="523.09" y="63.00" width="23.20" height="26.84" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="546.28" y="63.00" width="23.20" height="26.84" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="569.48" y="63.00" width="23.20" height="26.84" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
@@ -455,7 +455,7 @@
 <rect x="522.09" y="62.00" width="141.18" height="163.02" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="527.09" y="77.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">BlitCommandEncoder</text>
 </g>
-<g><title>MTLArgumentEncoder: Not implemented 5, Not yet rated 21</title>
+<g><title>MTLArgumentEncoder: Not implemented or stub 5, Not yet rated 21</title>
 <rect x="523.09" y="226.02" width="23.20" height="26.09" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="546.28" y="226.02" width="23.20" height="26.09" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="569.48" y="226.02" width="23.20" height="26.09" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
@@ -615,7 +615,7 @@
 <rect x="898.77" y="62.00" width="104.06" height="131.32" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="903.77" y="77.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">IndirectComma</text>
 </g>
-<g><title>MTLIOCommandBuffer: Not implemented 18</title>
+<g><title>MTLIOCommandBuffer: Not implemented or stub 18</title>
 <rect x="1003.83" y="63.00" width="24.15" height="25.86" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1027.98" y="63.00" width="24.15" height="25.86" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1052.12" y="63.00" width="24.15" height="25.86" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -637,7 +637,7 @@
 <rect x="1002.83" y="62.00" width="98.58" height="131.32" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1007.83" y="77.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">IOCommandBuf</text>
 </g>
-<g><title>MTLRenderPipelineState: Not implemented 1, Not yet rated 17</title>
+<g><title>MTLRenderPipelineState: Not implemented or stub 1, Not yet rated 17</title>
 <rect x="1102.42" y="63.00" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1126.56" y="63.00" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1150.71" y="63.00" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
@@ -700,7 +700,7 @@
 <rect x="663.26" y="303.60" width="110.87" height="103.79" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="668.26" y="318.60" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">AccelerationSt</text>
 </g>
-<g><title>MTLIndirectRenderCommand: Not implemented 7, Not yet rated 9</title>
+<g><title>MTLIndirectRenderCommand: Not implemented or stub 7, Not yet rated 9</title>
 <rect x="664.26" y="408.39" width="27.22" height="25.45" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="691.48" y="408.39" width="27.22" height="25.45" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="718.70" y="408.39" width="27.22" height="25.45" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
@@ -774,7 +774,7 @@
 <rect x="774.13" y="299.27" width="95.03" height="105.96" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="779.13" y="314.27" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Resource</text>
 </g>
-<g><title>MTLComputePipelineState: Not implemented 1, Not yet rated 12</title>
+<g><title>MTLComputePipelineState: Not implemented or stub 1, Not yet rated 12</title>
 <rect x="775.13" y="406.23" width="23.26" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="798.39" y="406.23" width="23.26" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="821.64" y="406.23" width="23.26" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
@@ -808,7 +808,7 @@
 <rect x="774.13" y="503.61" width="95.03" height="98.39" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="779.13" y="518.61" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Function</text>
 </g>
-<g><title>MTLLibrary: Not implemented 2, Not yet rated 11</title>
+<g><title>MTLLibrary: Not implemented or stub 2, Not yet rated 11</title>
 <rect x="870.16" y="194.32" width="21.90" height="25.59" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="892.06" y="194.32" width="21.90" height="25.59" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="913.96" y="194.32" width="21.90" height="25.59" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
@@ -825,7 +825,7 @@
 <rect x="869.16" y="193.32" width="89.60" height="104.35" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="874.16" y="208.32" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Library</text>
 </g>
-<g><title>MTLResourceStateCommandEncoder: Not implemented 13</title>
+<g><title>MTLResourceStateCommandEncoder: Not implemented or stub 13</title>
 <rect x="959.76" y="194.32" width="21.90" height="25.59" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="981.66" y="194.32" width="21.90" height="25.59" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1003.56" y="194.32" width="21.90" height="25.59" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -872,7 +872,7 @@
 <rect x="1124.18" y="193.32" width="75.82" height="104.35" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1129.18" y="208.32" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">CommandQu</text>
 </g>
-<g><title>MTLIndirectComputeCommand: Not implemented 2, Not yet rated 9</title>
+<g><title>MTLIndirectComputeCommand: Not implemented or stub 2, Not yet rated 9</title>
 <rect x="870.16" y="298.66" width="23.72" height="26.55" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="893.88" y="298.66" width="23.72" height="26.55" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="917.60" y="298.66" width="23.72" height="26.55" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
@@ -901,7 +901,7 @@
 <rect x="869.16" y="379.31" width="96.89" height="74.23" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="874.16" y="394.31" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">BinaryArchiv</text>
 </g>
-<g><title>MTLRasterizationRateMap: Not implemented 10</title>
+<g><title>MTLRasterizationRateMap: Not implemented or stub 10</title>
 <rect x="870.16" y="454.54" width="23.72" height="24.08" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="893.88" y="454.54" width="23.72" height="24.08" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="917.60" y="454.54" width="23.72" height="24.08" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -929,7 +929,7 @@
 <rect x="869.16" y="527.77" width="96.89" height="74.23" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="874.16" y="542.77" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">TextureBindi</text>
 </g>
-<g><title>MTLObjectPayloadBinding: Not implemented 8</title>
+<g><title>MTLObjectPayloadBinding: Not implemented or stub 8</title>
 <rect x="967.05" y="298.66" width="25.33" height="23.93" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="992.38" y="298.66" width="25.33" height="23.93" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1017.70" y="298.66" width="25.33" height="23.93" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -953,7 +953,7 @@
 <rect x="1044.03" y="297.66" width="77.98" height="73.78" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1049.03" y="312.66" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">SharedEve</text>
 </g>
-<g><title>MTLThreadgroupBinding: Not implemented 8</title>
+<g><title>MTLThreadgroupBinding: Not implemented or stub 8</title>
 <rect x="1123.02" y="298.66" width="25.33" height="23.93" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1148.34" y="298.66" width="25.33" height="23.93" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1173.67" y="298.66" width="25.33" height="23.93" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -986,7 +986,7 @@
 <rect x="966.05" y="436.00" width="77.98" height="55.33" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="971.05" y="451.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Binding</text>
 </g>
-<g><title>MTLCaptureScope: Not implemented 6</title>
+<g><title>MTLCaptureScope: Not implemented or stub 6</title>
 <rect x="967.05" y="492.33" width="25.33" height="26.67" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="992.38" y="492.33" width="25.33" height="26.67" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1017.70" y="492.33" width="25.33" height="26.67" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -996,7 +996,7 @@
 <rect x="966.05" y="491.33" width="77.98" height="55.33" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="971.05" y="506.33" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">CaptureSc</text>
 </g>
-<g><title>MTLDrawable: Not implemented 6</title>
+<g><title>MTLDrawable: Not implemented or stub 6</title>
 <rect x="967.05" y="547.67" width="25.33" height="26.67" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="992.38" y="547.67" width="25.33" height="26.67" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1017.70" y="547.67" width="25.33" height="26.67" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -1015,7 +1015,7 @@
 <rect x="1044.03" y="371.44" width="55.70" height="64.56" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1049.03" y="386.44" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Dynami</text>
 </g>
-<g><title>MTLIOCommandQueue: Not implemented 5</title>
+<g><title>MTLIOCommandQueue: Not implemented or stub 5</title>
 <rect x="1100.73" y="372.44" width="17.90" height="31.28" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1118.64" y="372.44" width="17.90" height="31.28" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1136.54" y="372.44" width="17.90" height="31.28" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -1032,7 +1032,7 @@
 <rect x="1155.44" y="371.44" width="44.56" height="64.56" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1160.44" y="386.44" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Coun</text>
 </g>
-<g><title>MTLFunctionLog: Not implemented 4</title>
+<g><title>MTLFunctionLog: Not implemented or stub 4</title>
 <rect x="1045.03" y="437.00" width="27.36" height="24.36" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1072.39" y="437.00" width="27.36" height="24.36" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1045.03" y="461.36" width="27.36" height="24.36" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -1040,7 +1040,7 @@
 <rect x="1044.03" y="436.00" width="56.72" height="50.72" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1049.03" y="451.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Functi</text>
 </g>
-<g><title>MTLFunctionLogDebugLocation: Not implemented 4</title>
+<g><title>MTLFunctionLogDebugLocation: Not implemented or stub 4</title>
 <rect x="1101.75" y="437.00" width="27.36" height="24.36" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1129.11" y="437.00" width="27.36" height="24.36" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1101.75" y="461.36" width="27.36" height="24.36" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -1048,7 +1048,7 @@
 <rect x="1100.75" y="436.00" width="56.72" height="50.72" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1105.75" y="451.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Functi</text>
 </g>
-<g><title>MTLCommandBufferEncoderInfo: Not implemented 3</title>
+<g><title>MTLCommandBufferEncoderInfo: Not implemented or stub 3</title>
 <rect x="1158.46" y="437.00" width="20.27" height="24.36" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1178.73" y="437.00" width="20.27" height="24.36" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1158.46" y="461.36" width="40.54" height="24.36" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
@@ -1095,7 +1095,7 @@
 <rect x="1100.18" y="522.74" width="36.30" height="39.63" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1105.18" y="537.74" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Dep</text>
 </g>
-<g><title>MTLIOFileHandle: Not implemented 2</title>
+<g><title>MTLIOFileHandle: Not implemented or stub 2</title>
 <rect x="1101.18" y="563.37" width="17.15" height="37.63" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1118.33" y="563.37" width="17.15" height="37.63" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1100.18" y="562.37" width="36.30" height="39.63" fill="none" stroke="#0f1218" stroke-width="2"/>
@@ -1111,23 +1111,23 @@
 <rect x="1168.24" y="522.74" width="31.76" height="22.64" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1173.24" y="537.74" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Cou</text>
 </g>
-<g><title>MTLFunctionStitchingNode: Not implemented 1</title>
+<g><title>MTLFunctionStitchingNode: Not implemented or stub 1</title>
 <rect x="1137.48" y="546.39" width="23.41" height="26.31" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1136.48" y="545.39" width="25.41" height="28.31" fill="none" stroke="#0f1218" stroke-width="2"/>
 </g>
-<g><title>MTLIOScratchBuffer: Not implemented 1</title>
+<g><title>MTLIOScratchBuffer: Not implemented or stub 1</title>
 <rect x="1137.48" y="574.69" width="23.41" height="26.31" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1136.48" y="573.69" width="25.41" height="28.31" fill="none" stroke="#0f1218" stroke-width="2"/>
 </g>
-<g><title>MTLIOScratchBufferAllocator: Not implemented 1</title>
+<g><title>MTLIOScratchBufferAllocator: Not implemented or stub 1</title>
 <rect x="1162.89" y="546.39" width="17.06" height="35.74" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1161.89" y="545.39" width="19.06" height="37.74" fill="none" stroke="#0f1218" stroke-width="2"/>
 </g>
-<g><title>MTLLogContainer: Not implemented 1</title>
+<g><title>MTLLogContainer: Not implemented or stub 1</title>
 <rect x="1181.94" y="546.39" width="17.06" height="35.74" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1180.94" y="545.39" width="19.06" height="37.74" fill="none" stroke="#0f1218" stroke-width="2"/>
 </g>
-<g><title>MTLLogState: Not implemented 1</title>
+<g><title>MTLLogState: Not implemented or stub 1</title>
 <rect x="1162.89" y="584.13" width="36.11" height="16.87" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1161.89" y="583.13" width="38.11" height="18.87" fill="none" stroke="#0f1218" stroke-width="2"/>
 </g>

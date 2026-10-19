@@ -26,7 +26,7 @@ h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}
 </main>
 <script>
 const D=/*DATA*/;
-const NAMES={missing:"Not implemented",inherited:"Answered by Apple's Metal code, not ours",slow:"Implemented, very slow",improve:"Needs improvement, fine for now",great:"Works great",differs:"Implemented, differs from Apple's result",unrated:"Implemented, not yet rated"};
+const NAMES={missing:"Not implemented or a stub",inherited:"Answered by Apple's Metal code, not ours",slow:"Implemented, very slow",improve:"Needs improvement, fine for now",great:"Works great",differs:"Implemented, differs from Apple's result",unrated:"Implemented, not yet rated"};
 document.getElementById("sub").textContent=D.total+" methods in "+D.groups.length+" protocols"+(D.device?" - "+D.device:"");
 document.getElementById("legend").innerHTML=Object.keys(NAMES).map(k=>`<li><span class="sw ${k}"></span>${NAMES[k]} (${D.totals[k]})</li>`).join("");
 // Dense squarified treemap: one block per protocol, sized by its method count. Inside a block the methods are the

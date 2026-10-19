@@ -5,7 +5,7 @@ The whole API counts, including features made for Apple silicon.
 
 | Color | Meaning |
 |---|---|
-| gray | not implemented |
+| gray | not implemented, or a stub: the method exists but does nothing useful (empty body, constant return, argument ignored) |
 | teal | answered by Apple's own Metal code, not by this driver |
 | red | implemented but very slow |
 | yellow | needs improvement, fine for now |
@@ -13,7 +13,7 @@ The whole API counts, including features made for Apple silicon.
 | purple | implemented but does not return what Apple's implementation returns |
 | blue | implemented, not yet rated |
 
-A color other than gray, teal and blue only comes from `tools/metal-ratings.json`, with a note and the evidence (a test,
+A color other than gray, teal and blue only comes from `tools/metal-ratings.json` (a rating of `stub` there draws gray), with a note and the evidence (a test,
 a measurement or a source line). "Implemented" means a driver class answers the selector; it says nothing about whether
 it works.
 
