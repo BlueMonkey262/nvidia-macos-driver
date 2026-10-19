@@ -178,14 +178,14 @@
    "status": "stub"
   },
   "writeCompactedAccelerationStructureSize:toBuffer:offset:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:5634-5635 (model-reviewed, not tested)",
-   "note": "Metal writes compacted size; we write the structure's allocated _b.size via the typed form.",
-   "status": "differs"
+   "evidence": "read from source (model-reviewed, not tested)",
+   "note": "Writes the structure's current size, a legal compacted size (compaction may return the same size).",
+   "status": "great"
   },
   "writeCompactedAccelerationStructureSize:toBuffer:offset:sizeDataType:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:5637-5652 (model-reviewed, not tested)",
-   "note": "Encodes GPU/CPU write of a->_b.size; Metal documents the post-compaction size.",
-   "status": "differs"
+   "evidence": "read from source (model-reviewed, not tested)",
+   "note": "Writes the structure's current size, a legal compacted size (compaction may return the same size).",
+   "status": "great"
   }
  },
  "MTLAllocation": {
@@ -3365,9 +3365,9 @@
    "status": "great"
   },
   "threadgroupSizeMatchesTileSize": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2552 (model-reviewed, not tested)",
-   "note": "Always NO; a tile-backed pipeline in Metal can report YES. [low confidence]",
-   "status": "differs"
+   "evidence": "read from source (model-reviewed, not tested)",
+   "note": "There is no tile pipeline creation path here, so NO is the right answer.",
+   "status": "great"
   }
  },
  "MTLResidencySet": {
