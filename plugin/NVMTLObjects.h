@@ -68,6 +68,7 @@ void nvmtl_resid_texture_gone(uint64_t token);
 uint64_t nvmtl_resid_for_sampler(id s);
 @interface NVMTLType : NSObject { @public MTLDataType _dataType; } @end
 @interface NVMTLVertexAttribute : NSObject { @public NSString *_name; NSUInteger _index; MTLDataType _dataType; } @end
+@interface NVMTLAttribute : NSObject { @public NSString *_name; NSUInteger _index; MTLDataType _dataType; } @end
 @interface NVMTLTextureReferenceType : NVMTLType { @public MTLDataType _texDataType; MTLTextureType _texType; MTLBindingAccess _access; BOOL _depth; } @end
 @interface NVMTLStructType : NVMTLType { @public NSArray *_members; } @end
 @interface NVMTLPointerType : NVMTLType { @public MTLDataType _elem; MTLBindingAccess _access; NSUInteger _align, _size; BOOL _isArgBuf; NVMTLStructType *_elemStruct; } @end

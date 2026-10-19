@@ -64,6 +64,7 @@ static int g_bt_status, g_bt_enqueue, g_bt_handler, g_bt_release, g_bt_commit;
 
 #pragma mark - buffer
 static NSArray *nvmtl_vertex_attributes_for(NVMTLFunction *fn);
+static NSArray *nvmtl_stage_input_attributes_for(NVMTLFunction *fn);
 #include <os/lock.h>
 static os_unfair_lock gManagedLock = OS_UNFAIR_LOCK_INIT;
 static NSHashTable *gManagedDirty;
@@ -1842,7 +1843,7 @@ static NSDictionary *nvmtl_ci_stitch_entry(NVMTLFunction *fn)
     return e;
 }
 - (NSArray<MTLVertexAttribute *> *)vertexAttributes { return (NSArray<MTLVertexAttribute *> *)nvmtl_vertex_attributes_for(self); }
-- (NSArray<MTLAttribute *> *)stageInputAttributes { return (NSArray<MTLAttribute *> *)nvmtl_vertex_attributes_for(self); }
+- (NSArray<MTLAttribute *> *)stageInputAttributes { return (NSArray<MTLAttribute *> *)nvmtl_stage_input_attributes_for(self); }
 - (MTLPatchType)patchType { uint32_t pt = 0, n = 0; return nvmtl_spirv_tess_info(_spirv.bytes, _spirv.length, &pt, &n) ? (MTLPatchType)pt : MTLPatchTypeNone; }
 - (NSInteger)patchControlPointCount {
     uint32_t pt = 0, n = 0; if (!nvmtl_spirv_tess_info(_spirv.bytes, _spirv.length, &pt, &n)) return -1;
@@ -1889,12 +1890,33 @@ static MTLDataType nvmtl_datatype_for_air_name(NSString *t);
 - (BOOL)isPatchData { return NO; }
 - (BOOL)isPatchControlPointData { return NO; }
 @end
+@implementation NVMTLAttribute
+- (NSString *)name { return _name ?: @""; }
+- (NSUInteger)attributeIndex { return _index; }
+- (MTLDataType)attributeType { return _dataType; }
+- (BOOL)isActive { return YES; }
+- (BOOL)isPatchData { return NO; }
+- (BOOL)isPatchControlPointData { return NO; }
+@end
 static NSArray *nvmtl_vertex_attributes_for(NVMTLFunction *fn) {
     NSDictionary *refl = nvmtl_function_reflection(fn);
     NSMutableArray *out = [NSMutableArray new];
     for (NSDictionary *a in refl[@"vertex_attributes"]) {
         if (![a isKindOfClass:[NSDictionary class]]) continue;
         NVMTLVertexAttribute *v = [NVMTLVertexAttribute new];
+        v->_index = [a[@"location"] unsignedLongValue];
+        v->_name = [a[@"name"] isKindOfClass:[NSString class]] ? a[@"name"] : [NSString stringWithFormat:@"attribute%lu", (unsigned long)v->_index];
+        v->_dataType = [a[@"type_name"] isKindOfClass:[NSString class]] ? nvmtl_datatype_for_air_name(a[@"type_name"]) : MTLDataTypeFloat4;
+        [out addObject:v];
+    }
+    return out;
+}
+static NSArray *nvmtl_stage_input_attributes_for(NVMTLFunction *fn) {
+    NSDictionary *refl = nvmtl_function_reflection(fn);
+    NSMutableArray *out = [NSMutableArray new];
+    for (NSDictionary *a in refl[@"vertex_attributes"]) {
+        if (![a isKindOfClass:[NSDictionary class]]) continue;
+        NVMTLAttribute *v = [NVMTLAttribute new];
         v->_index = [a[@"location"] unsignedLongValue];
         v->_name = [a[@"name"] isKindOfClass:[NSString class]] ? a[@"name"] : [NSString stringWithFormat:@"attribute%lu", (unsigned long)v->_index];
         v->_dataType = [a[@"type_name"] isKindOfClass:[NSString class]] ? nvmtl_datatype_for_air_name(a[@"type_name"]) : MTLDataTypeFloat4;
@@ -1960,6 +1982,10 @@ static NSArray *nvmtl_vertex_attributes_for(NVMTLFunction *fn) {
 @interface NVMTLTextureArgument : NVMTLArgument <MTLTextureBinding> @end
 @implementation NVMTLTextureArgument
 - (MTLBindingType)type { return MTLBindingTypeTexture; }
+@end
+@interface NVMTLSamplerArgument : NVMTLArgument @end
+@implementation NVMTLSamplerArgument
+- (MTLBindingType)type { return MTLBindingTypeSampler; }
 @end
 @interface NVMTLStageInArgument : NVMTLBufferArgument @end
 @implementation NVMTLStageInArgument
@@ -2137,7 +2163,7 @@ NSArray<NVMTLArgument *> *nvmtl_arguments_for_function(NVMTLFunction *fn)
                 id loc = b[@"descriptor"]; a->_arrayLength = [loc isKindOfClass:[NSDictionary class]] && [loc[@"count"] unsignedLongValue] > 1 ? [loc[@"count"] unsignedLongValue] : 1;
                 [out addObject:a];
             } else if ([kind isEqualToString:@"Sampler"]) {
-                NVMTLArgument *a = [NVMTLArgument new]; a->_type = MTLArgumentTypeSampler; a->_index = idx; a->_active = nvmtl_binding_active(b); a->_arrayLength = 1;
+                NVMTLArgument *a = [NVMTLSamplerArgument new]; a->_type = MTLArgumentTypeSampler; a->_index = idx; a->_active = nvmtl_binding_active(b); a->_arrayLength = 1;
                 a->_name = names[@"args"][[NSString stringWithFormat:@"sampler:%lu", (unsigned long)idx]] ?: [NSString stringWithFormat:@"sampler%lu", (unsigned long)idx];
                 [out addObject:a];
             }

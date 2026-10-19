@@ -242,6 +242,7 @@ static const char *const kNVFwdClasses[] = {
     "NVMTLHeap", "NVMTLIndirectCommand", "NVMTLIndirectCommandBuffer",
     "NVMTLParallelRenderCommandEncoder", "NVMTLRenderPipelineReflection", "NVMTLComputePipelineReflection", "NVMTLArgument",
     "NVMTLStructType", "NVMTLStructMember", "NVMTLPointerType", "NVMTLTextureReferenceType", "NVMTLVertexAttribute",
+    "NVMTLAttribute",
     NULL
 };
 

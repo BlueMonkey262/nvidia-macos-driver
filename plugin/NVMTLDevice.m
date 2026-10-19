@@ -1147,11 +1147,13 @@ static void nvmtl_stitch_dump(const char *what, NSString *dag, NSArray *fns, id 
 }
 
 - (void)newLibraryWithStitchedDescriptor:(id)desc completionHandler:(void (^)(id<MTLLibrary>, NSError *))handler {
-    NSError *e = nil;
-    id<MTLLibrary> lib = [self newLibraryWithStitchedDescriptor:desc error:&e];
     if (!handler) return;
-    NSError *err = lib ? nil : e;
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ handler(lib, err); });
+    id snapshot = [desc conformsToProtocol:@protocol(NSCopying)] ? [desc copy] : desc;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ @autoreleasepool {
+        NSError *e = nil;
+        id<MTLLibrary> lib = [self newLibraryWithStitchedDescriptor:snapshot error:&e];
+        handler(lib, lib ? nil : e);
+    }});
 }
 - (id<MTLLibrary>)newLibraryWithStitchedDescriptorSPI:(id)desc error:(NSError **)err {
     nvlog("newLibraryWithStitchedDescriptorSPI: routed through the public stitcher bridge");
@@ -1209,8 +1211,14 @@ static void nvmtl_stitch_dump(const char *what, NSString *dag, NSArray *fns, id 
     return mine;
 }
 - (void)newLibraryWithSource:(NSString *)src options:(MTLCompileOptions *)opt completionHandler:(MTLNewLibraryCompletionHandler)h {
-    NSError *e = nil; id<MTLLibrary> lib = [self newLibraryWithSource:src options:opt error:&e];
-    if (h) dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ h(lib, e); });
+    if (!h) return;
+    NSString *srcCopy = [src copy];
+    MTLCompileOptions *optCopy = [opt copy];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ @autoreleasepool {
+        NSError *e = nil;
+        id<MTLLibrary> lib = [self newLibraryWithSource:srcCopy options:optCopy error:&e];
+        h(lib, lib ? nil : e);
+    }});
 }
 - (id)targetDeviceArchitecture {
     static id arch; static dispatch_once_t once;

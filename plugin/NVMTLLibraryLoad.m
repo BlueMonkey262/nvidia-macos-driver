@@ -2664,9 +2664,13 @@ static NSString *nvmtl_mesh_text(uint8_t *p, size_t n) {
 }
 - (void)newRenderPipelineStateWithMeshDescriptor:(MTLMeshRenderPipelineDescriptor *)md options:(MTLPipelineOption)o
     completionHandler:(MTLNewRenderPipelineStateWithReflectionCompletionHandler)h {
-    NSError *e = nil; MTLRenderPipelineReflection *rf = nil;
-    id<MTLRenderPipelineState> ps = [self newRenderPipelineStateWithMeshDescriptor:md options:o reflection:&rf error:&e];
-    if (h) dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ h(ps, rf, e); });
+    if (!h) return;
+    MTLMeshRenderPipelineDescriptor *snapshot = [md copy];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ @autoreleasepool {
+        NSError *e = nil; MTLRenderPipelineReflection *rf = nil;
+        id<MTLRenderPipelineState> ps = [self newRenderPipelineStateWithMeshDescriptor:snapshot options:o reflection:&rf error:&e];
+        h(ps, rf, e);
+    }});
 }
 @end
 
