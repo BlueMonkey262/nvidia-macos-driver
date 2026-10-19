@@ -14,6 +14,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdatomic.h>
+#include <pthread.h>
+#include <dispatch/dispatch.h>
 #include <math.h>
 #define VK_NO_PROTOTYPES 1
 #include <vulkan/vulkan.h>
@@ -25,6 +27,66 @@ static int g_sampler_anisotropy, g_sampler_mirror_clamp;
 static int g_scalar_layout;
 
 void nvlog(const char *fmt, ...);
+#include "nvmtl_client_census.h"
+
+static pthread_once_t g_client_census_once = PTHREAD_ONCE_INIT;
+static dispatch_queue_t g_client_census_queue;
+static dispatch_source_t g_client_census_events, g_client_census_timer;
+static _Atomic(const char *) g_client_census_reason;
+static _Atomic uint64_t g_client_census_requests, g_client_census_buffers;
+static _Atomic uint64_t g_client_census_map_failures, g_client_census_create_failures;
+static void nvmtl_client_census_log(void *context)
+{
+    (void)context;
+    const char *why = atomic_exchange(&g_client_census_reason, NULL);
+    char snapshot[384]; nvmtl_client_census_snapshot(snapshot, sizeof snapshot);
+    nvlog("client census: %.32s requests=%llu buffers=%llu mapfail=%llu createfail=%llu %s", why ? why : "timer-5s",
+          (unsigned long long)atomic_exchange(&g_client_census_requests, 0),
+          (unsigned long long)atomic_load(&g_client_census_buffers),
+          (unsigned long long)atomic_load(&g_client_census_map_failures),
+          (unsigned long long)atomic_load(&g_client_census_create_failures), snapshot);
+}
+static void nvmtl_client_census_start(void)
+{
+    /* The plugin is process-lived, like its Vulkan device. No render/allocator locks
+     * are taken by this queue, and bursts merge instead of building an OOM backlog. */
+    g_client_census_queue = dispatch_queue_create("nvmtl.client-census", DISPATCH_QUEUE_SERIAL);
+    if (!g_client_census_queue) return;
+    dispatch_set_target_queue(g_client_census_queue, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0));
+    g_client_census_events = dispatch_source_create(DISPATCH_SOURCE_TYPE_DATA_ADD, 0, 0, g_client_census_queue);
+    g_client_census_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_client_census_queue);
+    if (g_client_census_events) {
+        dispatch_source_set_event_handler_f(g_client_census_events, nvmtl_client_census_log);
+        dispatch_resume(g_client_census_events);
+    }
+    if (g_client_census_timer) {
+        dispatch_source_set_event_handler_f(g_client_census_timer, nvmtl_client_census_log);
+        dispatch_source_set_timer(g_client_census_timer, dispatch_time(DISPATCH_TIME_NOW, 5ll * NSEC_PER_SEC), 5ull * NSEC_PER_SEC, NSEC_PER_SEC / 4);
+        dispatch_resume(g_client_census_timer);
+    }
+}
+void nvmtl_client_census_request(const char *why)
+{
+    pthread_once(&g_client_census_once, nvmtl_client_census_start);
+    atomic_store(&g_client_census_reason, why); /* callers pass string literals */
+    atomic_fetch_add(&g_client_census_requests, 1);
+    if (g_client_census_events) dispatch_source_merge_data(g_client_census_events, 1);
+}
+static void nvmtl_client_census_buffer(void)
+{
+    if ((atomic_fetch_add(&g_client_census_buffers, 1) + 1) % 2048 == 0)
+        nvmtl_client_census_request("buffer-2048");
+}
+static VkResult nvmtl_client_census_result(VkResult result, const char *what)
+{
+    if (result != VK_SUCCESS) {
+        if (!strncmp(what, "pvkMapMemory", 12)) atomic_fetch_add(&g_client_census_map_failures, 1);
+        else atomic_fetch_add(&g_client_census_create_failures, 1);
+        nvmtl_client_census_request(what);
+    }
+    return result;
+}
+#define NVMTL_CENSUS_VK(call) nvmtl_client_census_result((call), #call)
 
 static __thread uint32_t g_copy_aspect_override, g_copy_bpp_override;
 void nvmtl_vk_copy_aspect_override(uint32_t aspect, uint32_t bpp) { g_copy_aspect_override = aspect; g_copy_bpp_override = bpp; }
@@ -327,7 +389,7 @@ _Static_assert(sizeof(VkBuffer) == sizeof(void *) && _Alignof(VkBuffer) == _Alig
 static VkResult nvmtl_opaque_CreateBuffer(VkDevice dev, const VkBufferCreateInfo *info, const VkAllocationCallbacks *allocator, void **out)
 {
     VkBuffer handle = VK_NULL_HANDLE;
-    VkResult result = pvkCreateBuffer(dev, info, allocator, &handle);
+    VkResult result = NVMTL_CENSUS_VK(pvkCreateBuffer(dev, info, allocator, &handle));
     if (result == VK_SUCCESS) *out = handle;
     return result;
 }
@@ -335,7 +397,7 @@ _Static_assert(sizeof(VkDeviceMemory) == sizeof(void *) && _Alignof(VkDeviceMemo
 static VkResult nvmtl_opaque_AllocateMemory(VkDevice dev, const VkMemoryAllocateInfo *info, const VkAllocationCallbacks *allocator, void **out)
 {
     VkDeviceMemory handle = VK_NULL_HANDLE;
-    VkResult result = pvkAllocateMemory(dev, info, allocator, &handle);
+    VkResult result = NVMTL_CENSUS_VK(pvkAllocateMemory(dev, info, allocator, &handle));
     if (result == VK_SUCCESS) *out = handle;
     return result;
 }
@@ -360,7 +422,7 @@ static VkResult nvmtl_typed_CreateImage(VkDevice dev, const VkImageCreateInfo *i
     // a colour attachment is also an input attachment for [[color(n)]] framebuffer fetch (nvmtl_fbfetch_on)
     if ((adjusted.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) && nvmtl_fbfetch_on()) adjusted.usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     VkImage handle = VK_NULL_HANDLE;
-    VkResult result = pvkCreateImage(dev, &adjusted, allocator, &handle);
+    VkResult result = NVMTL_CENSUS_VK(pvkCreateImage(dev, &adjusted, allocator, &handle));
     if (result != VK_SUCCESS) return result;
     if (g_sample_locations &&
         (adjusted.flags & VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT)) {
@@ -385,7 +447,7 @@ _Static_assert(sizeof(VkImageView) == sizeof(void *) && _Alignof(VkImageView) ==
 static VkResult nvmtl_opaque_CreateImageView(VkDevice dev, const VkImageViewCreateInfo *info, const VkAllocationCallbacks *allocator, void **out)
 {
     VkImageView handle = VK_NULL_HANDLE;
-    VkResult result = pvkCreateImageView(dev, info, allocator, &handle);
+    VkResult result = NVMTL_CENSUS_VK(pvkCreateImageView(dev, info, allocator, &handle));
     if (result == VK_SUCCESS) *out = handle;
     return result;
 }
@@ -393,7 +455,7 @@ _Static_assert(sizeof(VkPipelineLayout) == sizeof(void *) && _Alignof(VkPipeline
 static VkResult nvmtl_opaque_CreatePipelineLayout(VkDevice dev, const VkPipelineLayoutCreateInfo *info, const VkAllocationCallbacks *allocator, void **out)
 {
     VkPipelineLayout handle = VK_NULL_HANDLE;
-    VkResult result = pvkCreatePipelineLayout(dev, info, allocator, &handle);
+    VkResult result = NVMTL_CENSUS_VK(pvkCreatePipelineLayout(dev, info, allocator, &handle));
     if (result == VK_SUCCESS) *out = handle;
     return result;
 }
@@ -401,7 +463,7 @@ _Static_assert(sizeof(VkCommandPool) == sizeof(void *) && _Alignof(VkCommandPool
 static VkResult nvmtl_opaque_CreateCommandPool(VkDevice dev, const VkCommandPoolCreateInfo *info, const VkAllocationCallbacks *allocator, void **out)
 {
     VkCommandPool handle = VK_NULL_HANDLE;
-    VkResult result = pvkCreateCommandPool(dev, info, allocator, &handle);
+    VkResult result = NVMTL_CENSUS_VK(pvkCreateCommandPool(dev, info, allocator, &handle));
     if (result == VK_SUCCESS) *out = handle;
     return result;
 }
@@ -411,7 +473,7 @@ static VkResult nvmtl_opaque_CreateGraphicsPipelines(VkDevice dev, VkPipelineCac
     VkPipeline handle = VK_NULL_HANDLE;
     VkGraphicsPipelineCreateInfo pinfo;
     if (g_pstat) { pinfo = *info; pinfo.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR; info = &pinfo; }
-    VkResult result = pvkCreateGraphicsPipelines(dev, cache, count, info, allocator, &handle);
+    VkResult result = NVMTL_CENSUS_VK(pvkCreateGraphicsPipelines(dev, cache, count, info, allocator, &handle));
     if (result == VK_SUCCESS) *out = handle;
     else if (handle) pvkDestroyPipeline(dev, handle, allocator);
     return result;
@@ -449,7 +511,7 @@ static VkResult nvmtl_opaque_CreateComputePipelines(VkDevice dev, VkPipelineCach
 {
     if (count != 1) return VK_ERROR_INITIALIZATION_FAILED;
     VkPipeline handle = VK_NULL_HANDLE;
-    VkResult result = pvkCreateComputePipelines(dev, cache, count, info, allocator, &handle);
+    VkResult result = NVMTL_CENSUS_VK(pvkCreateComputePipelines(dev, cache, count, info, allocator, &handle));
     if (result == VK_SUCCESS) *out = handle;
     else if (handle) pvkDestroyPipeline(dev, handle, allocator);
     return result;
@@ -460,12 +522,12 @@ static VkResult nvmtl_opaque_AllocateCommandBuffers(VkDevice dev, const VkComman
 {
     if (info->commandBufferCount != 1) return VK_ERROR_INITIALIZATION_FAILED;
     VkCommandBuffer handle = VK_NULL_HANDLE;
-    VkResult result = pvkAllocateCommandBuffers(dev, info, &handle);
+    VkResult result = NVMTL_CENSUS_VK(pvkAllocateCommandBuffers(dev, info, &handle));
     if (result == VK_SUCCESS) *out = handle;
     return result;
 }
 
-#define VKCK(x, what) do { VkResult r_ = (x); if (r_ != VK_SUCCESS) { nvlog("vk: %s -> %d", what, r_); return -1; } } while (0)
+#define VKCK(x, what) do { VkResult r_ = (x); if (r_ != VK_SUCCESS) { nvlog("vk: %s -> %d", what, r_); nvmtl_client_census_request(what); return -1; } } while (0)
 #include <fcntl.h>
 typedef struct { uint32_t version, surfaceID, plane, pad; uint64_t size_B; } nvmtl_vram_rec;
 static void (*pnvk_stage_import)(const nvmtl_vram_rec *);
@@ -623,7 +685,7 @@ static VkResult nvmtl_vkmsg_create_instance(VkInstanceCreateInfo *ici)
 {
     VkInstanceCreateInfo original = *ici;
     const char *ext[16]; uint32_t count = original.enabledExtensionCount;
-    if (count > 13) return pvkCreateInstance(ici, NULL, &g_inst);
+    if (count > 13) return NVMTL_CENSUS_VK(pvkCreateInstance(ici, NULL, &g_inst));
     for (uint32_t i = 0; i < count; ++i) ext[i] = original.ppEnabledExtensionNames[i];
     g_vkmsg_want = nvmtl_vkmsg_listed();
     const uint32_t diagnostic_count = count;
@@ -644,13 +706,13 @@ static VkResult nvmtl_vkmsg_create_instance(VkInstanceCreateInfo *ici)
         ici->pNext = &settings; ici->enabledLayerCount = 1; ici->ppEnabledLayerNames = &layer;
     }
     ici->enabledExtensionCount = count; ici->ppEnabledExtensionNames = count ? ext : NULL;
-    VkResult r = pvkCreateInstance(ici, NULL, &g_inst);
+    VkResult r = NVMTL_CENSUS_VK(pvkCreateInstance(ici, NULL, &g_inst));
     if (r != VK_SUCCESS && g_vkmsg_want) {
 
         for (uint32_t i = diagnostic_count; i + 1 < count; ++i) ext[i] = ext[i + 1];
         --count; g_vkmsg_want = 0;
         ici->enabledExtensionCount = count; ici->ppEnabledExtensionNames = count ? ext : NULL;
-        r = pvkCreateInstance(ici, NULL, &g_inst);
+        r = NVMTL_CENSUS_VK(pvkCreateInstance(ici, NULL, &g_inst));
     }
     if (r != VK_SUCCESS) g_sample_loader_unwrapped = 0;
     *ici = original;
@@ -683,6 +745,7 @@ static void nvmtl_vkmsg_arm(void)
 static int nvmtl_vk_initialize(void)
 {
     if (g_state) return g_state == 1 ? 0 : -1;
+    nvmtl_client_census_request("initialize");
     g_state = -1;
     if (!getenv("NVRM_FLUSH_TIMEOUT_MS")) {
         char budget[32]; snprintf(budget, sizeof budget, "%ld", nvmtl_gpu_wait_budget_ms());
@@ -968,7 +1031,7 @@ static int nvmtl_vk_initialize(void)
     nvlog("vk: tessellation %s, vertex-stage stores %s", g_tess ? "AVAILABLE" : "ABSENT", supported.vertexPipelineStoresAndAtomics ? "on" : "off");
     VkDeviceCreateInfo dci = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, g_dyn3 ? (const void *)&dyn3 : (const void *)&v11, 0,
                                1, &qci, 0, NULL, next, next ? exts : NULL, &enabled };
-    VKCK(pvkCreateDevice(g_pdev, &dci, NULL, &g_dev), "vkCreateDevice");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateDevice(g_pdev, &dci, NULL, &g_dev)), "vkCreateDevice");
     DEVICE_FNS(LOAD_D)
     if (g_pstat) { p_pstat_props = (PFN_vkGetPipelineExecutablePropertiesKHR)pvkGetDeviceProcAddr(g_dev, "vkGetPipelineExecutablePropertiesKHR");
                    p_pstat_stats = (PFN_vkGetPipelineExecutableStatisticsKHR)pvkGetDeviceProcAddr(g_dev, "vkGetPipelineExecutableStatisticsKHR");
@@ -1199,7 +1262,7 @@ static int bpark_take(size_t size, int host_visible, nvk_buffer *out)
     }
     pthread_mutex_unlock(&g_bpark_lock);
     if (hit < 0) return -1;
-    *out = got; g_buf_made++;
+    *out = got; g_buf_made++; nvmtl_client_census_buffer();
     atomic_fetch_add(&g_bpark_reused, 1); bpark_census("reuse");
     return 0;
 }
@@ -1242,7 +1305,7 @@ static int nvmtl_vk_sparse_bind(VkBuffer b, int unbind_first, VkDeviceMemory mem
     VkSparseBufferMemoryBindInfo bbi = { b, n, mb };
     VkBindSparseInfo bsi = { VK_STRUCTURE_TYPE_BIND_SPARSE_INFO, NULL, 0, NULL, 1, &bbi, 0, NULL, 0, NULL, 0, NULL };
     VkFenceCreateInfo fci = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, NULL, 0 }; VkFence f = VK_NULL_HANDLE;
-    if (pvkCreateFence(g_dev, &fci, NULL, &f) != VK_SUCCESS) return -1;
+    if (NVMTL_CENSUS_VK(pvkCreateFence(g_dev, &fci, NULL, &f)) != VK_SUCCESS) return -1;
     pthread_mutex_lock(&nvmtl_submit_mutex);
     VkResult r = g_state == 1 ? pvkQueueBindSparse(g_queue, 1, &bsi, f) : VK_ERROR_DEVICE_LOST;
     pthread_mutex_unlock(&nvmtl_submit_mutex);
@@ -1266,7 +1329,7 @@ static int nvmtl_vk_buffer_create_sparse(size_t size, nvk_buffer *out)
         VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | NVMTL_RT_BUFFER_USAGE,
         VK_SHARING_MODE_EXCLUSIVE, 0, NULL };
     VkBuffer b = VK_NULL_HANDLE;
-    if (pvkCreateBuffer(g_dev, &bci, NULL, &b) != VK_SUCCESS) return -1;
+    if (NVMTL_CENSUS_VK(pvkCreateBuffer(g_dev, &bci, NULL, &b)) != VK_SUCCESS) return -1;
     VkMemoryRequirements mr; pvkGetBufferMemoryRequirements(g_dev, b, &mr);
     uint64_t bfree = 0, bbud = 0, bused = 0; int bmeas = 0;
     int sys = nvmtl_vk_vram_wall(mr.size, &bfree, &bbud, &bused, &bmeas);
@@ -1274,9 +1337,9 @@ static int nvmtl_vk_buffer_create_sparse(size_t size, nvk_buffer *out)
     VkMemoryAllocateInfo mai = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &mafi, mr.size, 0 };
     VkDeviceMemory m = VK_NULL_HANDLE; VkResult ar = VK_ERROR_OUT_OF_DEVICE_MEMORY;
     if (!sys) { int mt = memtype(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-                if (mt >= 0) { mai.memoryTypeIndex = (uint32_t)mt; ar = pvkAllocateMemory(g_dev, &mai, NULL, &m); } }
+                if (mt >= 0) { mai.memoryTypeIndex = (uint32_t)mt; ar = NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, &m)); } }
     if (ar != VK_SUCCESS) { int mt = nvmtl_vk_sysmem_type(mr.memoryTypeBits); sys = 1;
-                            if (mt >= 0) { mai.memoryTypeIndex = (uint32_t)mt; ar = pvkAllocateMemory(g_dev, &mai, NULL, &m); } }
+                            if (mt >= 0) { mai.memoryTypeIndex = (uint32_t)mt; ar = NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, &m)); } }
     if (ar != VK_SUCCESS || nvmtl_vk_sparse_bind(b, 0, m, mr.size)) {
         if (m) pvkFreeMemory(g_dev, m, NULL);
         pvkDestroyBuffer(g_dev, b, NULL);
@@ -1284,7 +1347,7 @@ static int nvmtl_vk_buffer_create_sparse(size_t size, nvk_buffer *out)
         return -1;
     }
     out->buf = b; out->mem = m; out->size = size; out->alloc = mr.size; out->sparse = 1; out->sysmem = sys;
-    g_alloc_bytes += mr.size; g_buf_made++; g_res3_made++;
+    g_alloc_bytes += mr.size; g_buf_made++; nvmtl_client_census_buffer(); g_res3_made++;
     if (!sys) nvmtl_vk_budget_charge(mr.size);
     else { g_res3_madesys++; g_buf_vram_refused++;
            nvlog("vk: private buffer of %zu bytes REFUSED VRAM (our soft gate) -> system memory under a stable address (res3): %llu MB free, "
@@ -1299,6 +1362,7 @@ int nvmtl_vk_buffer_create(size_t size, int host_visible, nvk_buffer *out)
     nvk_buffer pending = {0};
     const int r = nvmtl_vk_buffer_create_body(size, host_visible, &pending);
     if (r) {
+        nvmtl_client_census_request("buffer-create-failed");
         if (pending.buf) pvkDestroyBuffer(g_dev, (VkBuffer)pending.buf, NULL);
         if (pending.mem) {
             if (pending.map) pvkUnmapMemory(g_dev, (VkDeviceMemory)pending.mem);
@@ -1336,11 +1400,11 @@ static int nvmtl_vk_buffer_create_body(size_t size, int host_visible, nvk_buffer
         VkMemoryAllocateFlagsInfo bf = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO, NULL, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT, 0 };
         VkMemoryAllocateInfo bi = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &bf, mr.size, (uint32_t)bt };
         VkDeviceMemory bm = VK_NULL_HANDLE; void *bp = NULL;
-        VkResult r1 = pvkAllocateMemory(g_dev, &bi, NULL, &bm);
-        VkResult r2 = r1 == VK_SUCCESS ? pvkMapMemory(g_dev, bm, 0, VK_WHOLE_SIZE, 0, &bp) : r1;
-        VkResult r3 = r2 == VK_SUCCESS ? pvkBindBufferMemory(g_dev, out->buf, bm, 0) : r2;
+        VkResult r1 = NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &bi, NULL, &bm));
+        VkResult r2 = r1 == VK_SUCCESS ? NVMTL_CENSUS_VK(pvkMapMemory(g_dev, bm, 0, VK_WHOLE_SIZE, 0, &bp)) : r1;
+        VkResult r3 = r2 == VK_SUCCESS ? NVMTL_CENSUS_VK(pvkBindBufferMemory(g_dev, out->buf, bm, 0)) : r2;
         if (r3 == VK_SUCCESS) {
-            out->mem = bm; out->map = bp; out->alloc = mr.size; out->bar1 = 1; g_alloc_bytes += mr.size; g_bar1_bytes += mr.size; g_buf_made++;
+            out->mem = bm; out->map = bp; out->alloc = mr.size; out->bar1 = 1; g_alloc_bytes += mr.size; g_bar1_bytes += mr.size; g_buf_made++; nvmtl_client_census_buffer();
             { static int said; if (!said++) nvlog("vk: shared buffer of %zu bytes placed in VRAM through BAR1 (type %d)", size, bt); }
             return 0; }
         if (bp) pvkUnmapMemory(g_dev, bm);
@@ -1372,8 +1436,8 @@ static int nvmtl_vk_buffer_create_body(size_t size, int host_visible, nvk_buffer
     } else VKCK(nvmtl_opaque_AllocateMemory(g_dev, &mai, NULL, &out->mem), "vkAllocateMemory(buffer)");
     out->alloc = mr.size;
     if (!host_visible) nvmtl_vk_budget_charge(mr.size);
-    VKCK(pvkBindBufferMemory(g_dev, out->buf, out->mem, 0), "vkBindBufferMemory");
-    if (host_visible) { VkResult mr_ = pvkMapMemory(g_dev, out->mem, 0, VK_WHOLE_SIZE, 0, &out->map); if (mr_ != VK_SUCCESS) {
+    VKCK(NVMTL_CENSUS_VK(pvkBindBufferMemory(g_dev, out->buf, out->mem, 0)), "vkBindBufferMemory");
+    if (host_visible) { VkResult mr_ = NVMTL_CENSUS_VK(pvkMapMemory(g_dev, out->mem, 0, VK_WHOLE_SIZE, 0, &out->map)); if (mr_ != VK_SUCCESS) {
         nvlog("vk: vkMapMemory -> %d for a %llu byte buffer with %llu buffers live (%llu made, %llu gone), %zu bytes allocated, memory type %d", mr_,
               (unsigned long long)mr.size, (unsigned long long)(g_buf_made - g_buf_gone), (unsigned long long)g_buf_made, (unsigned long long)g_buf_gone, g_alloc_bytes, mt);
         nvmtl_own_map_census("failed");
@@ -1382,7 +1446,7 @@ static int nvmtl_vk_buffer_create_body(size_t size, int host_visible, nvk_buffer
         g_own_map_size[mr.size <= (4u << 20) ? 0 : mr.size <= (16u << 20) ? 1 : mr.size <= (64u << 20) ? 2 : 3]++;
         if ((++g_own_maps & 0x1FF) == 0) nvmtl_own_map_census("running"); }
     g_alloc_bytes += mr.size;
-    g_buf_made++;
+    g_buf_made++; nvmtl_client_census_buffer();
     if ((g_buf_made & 0xFFF) == 0) nvlog("buffer census: %llu made, %llu gone, %llu live, %zu bytes allocated; pool %llu blocks, %llu pooled live, %llu bytes in ranges",
         (unsigned long long)g_buf_made, (unsigned long long)g_buf_gone, (unsigned long long)(g_buf_made - g_buf_gone), g_alloc_bytes,
         (unsigned long long)g_pool_blocks, (unsigned long long)g_pool_live, (unsigned long long)g_pool_bytes);
@@ -1450,12 +1514,12 @@ int nvmtl_vk_buffer_import_host(void *ptr, size_t size, nvk_buffer *out)
     if (nvmtl_opaque_AllocateMemory(g_dev, &mai, NULL, &out->mem) != VK_SUCCESS) {
         nvlog("vk: vkAllocateMemory refused the imported host pointer %p (%zu bytes, memory type %d)", ptr, size, mt);
         pvkDestroyBuffer(g_dev, (VkBuffer)out->buf, NULL); out->buf = NULL; out->mem = NULL; return -1; }
-    if (pvkBindBufferMemory(g_dev, (VkBuffer)out->buf, (VkDeviceMemory)out->mem, 0) != VK_SUCCESS) {
+    if (NVMTL_CENSUS_VK(pvkBindBufferMemory(g_dev, (VkBuffer)out->buf, (VkDeviceMemory)out->mem, 0)) != VK_SUCCESS) {
         nvlog("vk: vkBindBufferMemory refused the imported allocation");
         pvkFreeMemory(g_dev, (VkDeviceMemory)out->mem, NULL); pvkDestroyBuffer(g_dev, (VkBuffer)out->buf, NULL);
         out->buf = NULL; out->mem = NULL; return -1; }
     out->map = ptr; out->alloc = size; out->imported = 1;
-    g_alloc_bytes += size; g_buf_made++;
+    g_alloc_bytes += size; g_buf_made++; nvmtl_client_census_buffer();
     { static int said; if (!said++) nvlog("vk: imported the caller's pages as device memory — %zu bytes at %p, memory type %d", size, ptr, mt); }
     return 0;
 }
@@ -1736,7 +1800,7 @@ static VkResult nvmtl_vk_alloc_image_mem(const VkMemoryRequirements *mr, VkDevic
     uint64_t bud = 0, used = 0, freev = 0; int measured = 0;
     int gate = nvmtl_vk_vram_wall(mr->size, &freev, &bud, &used, &measured);
     VkResult r = VK_ERROR_OUT_OF_DEVICE_MEMORY;
-    if (!gate) r = pvkAllocateMemory(g_dev, &mai, NULL, mem);
+    if (!gate) r = NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, mem));
     else nvlog("vk: soft VRAM gate: %llu MB free on the card, this %s image wants %llu MB + %llu MB headroom -> SYSTEM MEMORY (heapUsage %llu of budget %llu MB, %s)",
                (unsigned long long)(freev >> 20), what, (unsigned long long)(mr->size >> 20),
                (unsigned long long)(NVMTL_VRAM_HEADROOM >> 20), (unsigned long long)(used >> 20),
@@ -1747,7 +1811,7 @@ static VkResult nvmtl_vk_alloc_image_mem(const VkMemoryRequirements *mr, VkDevic
         t_in_reclaim = 0;
         if (freed) {
             mai.memoryTypeIndex = (uint32_t)mt;
-            r = pvkAllocateMemory(g_dev, &mai, NULL, mem);
+            r = NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, mem));
             g_res2_evict_calls++; if (r == VK_SUCCESS) g_res2_evict_won++;
             { static unsigned said; if (said++ < 8 || said % 4096 == 0)
                 nvlog("residency (res2): evicted %llu MB on the allocating thread for a %llu MB %s image -> %s "
@@ -1761,7 +1825,7 @@ static VkResult nvmtl_vk_alloc_image_mem(const VkMemoryRequirements *mr, VkDevic
         int mt2 = -1;
         for (uint32_t i = 0; i < g_memp.memoryTypeCount; i++)
             if ((mr->memoryTypeBits & (1u << i)) && !(g_memp.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) { mt2 = (int)i; break; }
-        if (mt2 >= 0) { mai.memoryTypeIndex = (uint32_t)mt2; r = pvkAllocateMemory(g_dev, &mai, NULL, mem); if (r == VK_SUCCESS) *sysmem = 1; }
+        if (mt2 >= 0) { mai.memoryTypeIndex = (uint32_t)mt2; r = NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, mem)); if (r == VK_SUCCESS) *sysmem = 1; }
         if (r == VK_SUCCESS) { g_spilled++;
             if (nvmtl_purge_report_hook) nvmtl_purge_report_hook(what);
             nvlog("vk: %s image SPILLED to system memory (%s): images hold %llu MB VRAM + %llu MB system, heapUsage %llu MB, %llu MB free, %llu spilled so far",
@@ -1815,7 +1879,7 @@ int nvmtl_vk_image_create_ms_full(uint32_t w, uint32_t h, uint32_t vkfmt, uint32
 {
     nvk_image pending = {0};
     int result = nvmtl_vk_image_create_ms_lifetime_body(w, h, vkfmt, bpp, samples, mtl_type, layers, &pending);
-    if (result) { nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
+    if (result) { nvmtl_client_census_request("image-create-failed"); nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
     else { nvmtl_commit_image(&pending); *out = pending; }
     return result;
 }
@@ -1833,7 +1897,7 @@ static int nvmtl_vk_image_create_ms_lifetime_body(uint32_t w, uint32_t h, uint32
     VkMemoryRequirements mr; pvkGetImageMemoryRequirements(g_dev, out->img, &mr);
     VKCK(nvmtl_alloc_opaque_image_mem(&mr, &out->mem, &out->sysmem, "multisample"), "vkAllocateMemory(ms)");
     out->alloc = mr.size;
-    VKCK(pvkBindImageMemory(g_dev, out->img, out->mem, 0), "vkBindImageMemory(ms)");
+    VKCK(NVMTL_CENSUS_VK(pvkBindImageMemory(g_dev, out->img, out->mem, 0)), "vkBindImageMemory(ms)");
     VkImageViewCreateInfo vci = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, NULL, 0, out->img, mtl_type == 8 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D, (VkFormat)vkfmt,
         { 0, 0, 0, 0 }, { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, layers } };
     VKCK(nvmtl_opaque_CreateImageView(g_dev, &vci, NULL, &out->view), "vkCreateImageView(ms)");
@@ -1845,7 +1909,7 @@ int nvmtl_vk_image_create_typed(uint32_t w, uint32_t h, uint32_t vkfmt, uint32_t
 {
     nvk_image pending = {0};
     int result = nvmtl_vk_image_create_typed_lifetime_body(w, h, vkfmt, bpp, a8, mips, storage, mtl_type, layers, &pending);
-    if (result) { nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
+    if (result) { nvmtl_client_census_request("image-create-failed"); nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
     else { nvmtl_commit_image(&pending); *out = pending; }
     return result;
 }
@@ -1871,7 +1935,7 @@ static int nvmtl_vk_image_create_typed_lifetime_body(uint32_t w, uint32_t h, uin
     VkMemoryRequirements mr; pvkGetImageMemoryRequirements(g_dev, out->img, &mr);
     VKCK(nvmtl_alloc_opaque_image_mem(&mr, &out->mem, &out->sysmem, "colour"), "vkAllocateMemory(image)");
     out->alloc = mr.size;
-    VKCK(pvkBindImageMemory(g_dev, out->img, out->mem, 0), "vkBindImageMemory");
+    VKCK(NVMTL_CENSUS_VK(pvkBindImageMemory(g_dev, out->img, out->mem, 0)), "vkBindImageMemory");
     VkComponentMapping swz = a8 ? (VkComponentMapping){ VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_R }
                                 : (VkComponentMapping){ 0, 0, 0, 0 };
     VkImageViewType viewType = mtl_type == 0 ? VK_IMAGE_VIEW_TYPE_1D : mtl_type == 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : mtl_type == 3 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
@@ -1960,7 +2024,7 @@ int nvmtl_vk_surface_vram(uint32_t surfaceID, uint32_t plane, size_t need, nvk_b
     VkMemoryAllocateInfo mai = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &imp, need, (uint32_t)mt };
     VkDeviceMemory m = VK_NULL_HANDLE;
     pnvk_stage_import(&r);
-    VkResult vr = pvkAllocateMemory(g_dev, &mai, NULL, &m);
+    VkResult vr = NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, &m));
     pnvk_stage_import(NULL);
     if (vr != VK_SUCCESS) {
         close(imp.fd);
@@ -1971,14 +2035,14 @@ int nvmtl_vk_surface_vram(uint32_t surfaceID, uint32_t plane, size_t need, nvk_b
     VkBufferCreateInfo bci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, need,
                                VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_SHARING_MODE_EXCLUSIVE, 0, NULL };
     VkBuffer b = VK_NULL_HANDLE;
-    if (pvkCreateBuffer(g_dev, &bci, NULL, &b) != VK_SUCCESS || pvkBindBufferMemory(g_dev, b, m, 0) != VK_SUCCESS) {
+    if (NVMTL_CENSUS_VK(pvkCreateBuffer(g_dev, &bci, NULL, &b)) != VK_SUCCESS || NVMTL_CENSUS_VK(pvkBindBufferMemory(g_dev, b, m, 0)) != VK_SUCCESS) {
         if (b) pvkDestroyBuffer(g_dev, b, NULL);
         pvkFreeMemory(g_dev, m, NULL);
         nvlog("item 7: surface %u: a buffer over the imported VRAM was refused - private", surfaceID);
         return -1;
     }
     out->buf = b; out->mem = m; out->size = need; out->alloc = 0; out->imported = 1;
-    g_buf_made++;
+    g_buf_made++; nvmtl_client_census_buffer();
     return 0;
 }
 int nvmtl_vk_image_create_fmt(uint32_t w, uint32_t h, int bgra, nvk_image *out) { return nvmtl_vk_image_create_mips(w, h, bgra, 1, out); }
@@ -2200,7 +2264,7 @@ static VkResult nvmtl_sampler_acquire(const VkSamplerCreateInfo *info, VkSampler
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
     VkSampler handle = VK_NULL_HANDLE;
-    VkResult result = pvkCreateSampler(g_dev, info, NULL, &handle);
+    VkResult result = NVMTL_CENSUS_VK(pvkCreateSampler(g_dev, info, NULL, &handle));
     if (result != VK_SUCCESS || handle == VK_NULL_HANDLE) {
         pthread_mutex_unlock(&g_sampler_intern_lock);
         return result == VK_SUCCESS ? VK_ERROR_INITIALIZATION_FAILED : result;
@@ -2297,7 +2361,7 @@ static int nvmtl_desc_pool_open(void)
     VkMutableDescriptorTypeListEXT plists[5] = { { 0, NULL }, { 0, NULL }, { 4, mut4 }, { 0, NULL }, { 4, mut4 } };
     VkMutableDescriptorTypeCreateInfoEXT pmi = { VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT, NULL, 5, plists };
     if (g_mutable_layout) { sizes[2].type = VK_DESCRIPTOR_TYPE_MUTABLE_EXT; sizes[4].type = VK_DESCRIPTOR_TYPE_MUTABLE_EXT; pci.pNext = &pmi; }
-    VKCK(pvkCreateDescriptorPool(g_dev, &pci, NULL, &g_descPools[g_ndescPools]), "vkCreateDescriptorPool");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateDescriptorPool(g_dev, &pci, NULL, &g_descPools[g_ndescPools])), "vkCreateDescriptorPool");
     g_ndescPools++;
     if (g_ndescPools > 1)
         nvlog("vk: descriptor pool %u opened — one frame needed more than %u sets (%u draws)",
@@ -2330,7 +2394,7 @@ static int ensure_descriptors_locked(void)
         }
         lci.pNext = &mci;
     }
-    VKCK(pvkCreateDescriptorSetLayout(g_dev, &lci, NULL, &g_setLayout), "vkCreateDescriptorSetLayout");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateDescriptorSetLayout(g_dev, &lci, NULL, &g_setLayout)), "vkCreateDescriptorSetLayout");
     if (nvmtl_desc_pool_open()) return -1;
     if (nvmtl_vk_buffer_create(256, 1, &g_dummyBuf)) return -1;
     if (nvmtl_vk_image_create_fmt(1, 1, 0, &g_dummyImg)) return -1;
@@ -2365,10 +2429,10 @@ static int ensure_descriptors_locked(void)
         VkResult hr = VK_ERROR_UNKNOWN;
         for (;;) {
             hfi.bindingCount = hli.bindingCount = hpi.poolSizeCount = hnb;
-            hr = pvkCreateDescriptorSetLayout(g_dev, &hli, NULL, &hl);
-            if (hr == VK_SUCCESS) hr = pvkCreateDescriptorPool(g_dev, &hpi, NULL, &hp);
+            hr = NVMTL_CENSUS_VK(pvkCreateDescriptorSetLayout(g_dev, &hli, NULL, &hl));
+            if (hr == VK_SUCCESS) hr = NVMTL_CENSUS_VK(pvkCreateDescriptorPool(g_dev, &hpi, NULL, &hp));
             if (hr == VK_SUCCESS) { VkDescriptorSetAllocateInfo hai = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, NULL, hp, 1, &hl };
-                                    hr = pvkAllocateDescriptorSets(g_dev, &hai, &hset); }
+                                    hr = NVMTL_CENSUS_VK(pvkAllocateDescriptorSets(g_dev, &hai, &hset)); }
             if (hr == VK_SUCCESS || hnb == 1) break;
             nvlog("vk: BINDLESS heap with the sampler binding refused (vk result %d) - the texture-only heap instead; argument-buffer samplers read the default", (int)hr);
             if (hp) { pvkDestroyDescriptorPool(g_dev, hp, NULL); hp = VK_NULL_HANDLE; }
@@ -2836,11 +2900,11 @@ static VkDescriptorSet nvmtl_snapshot_set_md(nvk_cmdbuf *c, uint32_t which, uint
             r = VK_ERROR_OUT_OF_POOL_MEMORY;
             for (unsigned k = g_ndescPools; k-- > 0 && r != VK_SUCCESS;) {
                 VkDescriptorSetAllocateInfo ai = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, NULL, g_descPools[k], n, ls };
-                pool = g_descPools[k]; r = pvkAllocateDescriptorSets(g_dev, &ai, got);
+                pool = g_descPools[k]; r = NVMTL_CENSUS_VK(pvkAllocateDescriptorSets(g_dev, &ai, got));
             }
             if (r != VK_SUCCESS && nvmtl_desc_pool_open() == 0) {
                 VkDescriptorSetAllocateInfo ai = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, NULL, g_descPools[g_ndescPools - 1], n, ls };
-                pool = g_descPools[g_ndescPools - 1]; r = pvkAllocateDescriptorSets(g_dev, &ai, got);
+                pool = g_descPools[g_ndescPools - 1]; r = NVMTL_CENSUS_VK(pvkAllocateDescriptorSets(g_dev, &ai, got));
             }
             if (r == VK_SUCCESS || n == 1) break;
             n = 1;
@@ -3141,8 +3205,8 @@ static int nvmtl_fetch_layouts_locked(void)
         fb[i] = (VkDescriptorSetLayoutBinding){ NVMTL_FETCH_BINDING + i, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL };
     VkDescriptorSetLayoutCreateInfo fli = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, NULL, 0, NVMTL_NCOL, fb };
     VkDescriptorSetLayoutCreateInfo eli = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, NULL, 0, 0, NULL };
-    if (pvkCreateDescriptorSetLayout(g_dev, &fli, NULL, &g_fetchLayout) != VK_SUCCESS) { g_fetchLayout = VK_NULL_HANDLE; return -1; }
-    if (pvkCreateDescriptorSetLayout(g_dev, &eli, NULL, &g_emptyLayout) != VK_SUCCESS) { g_emptyLayout = VK_NULL_HANDLE; return -1; }
+    if (NVMTL_CENSUS_VK(pvkCreateDescriptorSetLayout(g_dev, &fli, NULL, &g_fetchLayout)) != VK_SUCCESS) { g_fetchLayout = VK_NULL_HANDLE; return -1; }
+    if (NVMTL_CENSUS_VK(pvkCreateDescriptorSetLayout(g_dev, &eli, NULL, &g_emptyLayout)) != VK_SUCCESS) { g_emptyLayout = VK_NULL_HANDLE; return -1; }
     return 0;
 }
 static void nvmtl_fetch_barrier(nvk_cmdbuf *c)
@@ -3159,15 +3223,15 @@ static VkDescriptorSet nvmtl_fetch_set(nvk_cmdbuf *c, uint32_t mask)
     VkResult r = VK_ERROR_OUT_OF_POOL_MEMORY;
     for (unsigned k = g_nfetchPools; k-- > 0 && r != VK_SUCCESS;) {
         VkDescriptorSetAllocateInfo ai = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, NULL, g_fetchPools[k], 1, &g_fetchLayout };
-        pool = g_fetchPools[k]; r = pvkAllocateDescriptorSets(g_dev, &ai, &set);
+        pool = g_fetchPools[k]; r = NVMTL_CENSUS_VK(pvkAllocateDescriptorSets(g_dev, &ai, &set));
     }
     if (r != VK_SUCCESS && g_nfetchPools < 64) {
         VkDescriptorPoolSize ps = { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, NVMTL_NCOL * 1024 };
         VkDescriptorPoolCreateInfo pci = { VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, NULL, VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT, 1024, 1, &ps };
-        if (pvkCreateDescriptorPool(g_dev, &pci, NULL, &g_fetchPools[g_nfetchPools]) == VK_SUCCESS) {
+        if (NVMTL_CENSUS_VK(pvkCreateDescriptorPool(g_dev, &pci, NULL, &g_fetchPools[g_nfetchPools])) == VK_SUCCESS) {
             pool = g_fetchPools[g_nfetchPools++];
             VkDescriptorSetAllocateInfo ai = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, NULL, pool, 1, &g_fetchLayout };
-            r = pvkAllocateDescriptorSets(g_dev, &ai, &set);
+            r = NVMTL_CENSUS_VK(pvkAllocateDescriptorSets(g_dev, &ai, &set));
         }
     }
     pthread_mutex_unlock(&g_desc_lock);
@@ -3212,14 +3276,14 @@ static VkDescriptorSet nvmtl_fetch_zero_set(void)
         VkDescriptorSet set = VK_NULL_HANDLE; VkResult r = VK_ERROR_OUT_OF_POOL_MEMORY;
         for (unsigned k = g_nfetchPools; k-- > 0 && r != VK_SUCCESS;) {
             VkDescriptorSetAllocateInfo ai = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, NULL, g_fetchPools[k], 1, &g_fetchLayout };
-            r = pvkAllocateDescriptorSets(g_dev, &ai, &set);
+            r = NVMTL_CENSUS_VK(pvkAllocateDescriptorSets(g_dev, &ai, &set));
         }
         if (r != VK_SUCCESS && g_nfetchPools < 64) {
             VkDescriptorPoolSize ps = { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, NVMTL_NCOL * 1024 };
             VkDescriptorPoolCreateInfo pci = { VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, NULL, VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT, 1024, 1, &ps };
-            if (pvkCreateDescriptorPool(g_dev, &pci, NULL, &g_fetchPools[g_nfetchPools]) == VK_SUCCESS) {
+            if (NVMTL_CENSUS_VK(pvkCreateDescriptorPool(g_dev, &pci, NULL, &g_fetchPools[g_nfetchPools])) == VK_SUCCESS) {
                 VkDescriptorSetAllocateInfo ai = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, NULL, g_fetchPools[g_nfetchPools++], 1, &g_fetchLayout };
-                r = pvkAllocateDescriptorSets(g_dev, &ai, &set);
+                r = NVMTL_CENSUS_VK(pvkAllocateDescriptorSets(g_dev, &ai, &set));
             }
         }
         if (r == VK_SUCCESS) {
@@ -3294,7 +3358,7 @@ int nvmtl_vk_depth_create_full(uint32_t w, uint32_t h, uint32_t vkfmt, uint32_t 
 {
     nvk_image pending = {0};
     int result = nvmtl_vk_depth_create_full_lifetime_body(w, h, vkfmt, aspect, samples, mtl_type, layers, mips, &pending);
-    if (result) { nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
+    if (result) { nvmtl_client_census_request("image-create-failed"); nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
     else { nvmtl_commit_image(&pending); *out = pending; }
     return result;
 }
@@ -3316,7 +3380,7 @@ static int nvmtl_vk_depth_create_full_lifetime_body(uint32_t w, uint32_t h, uint
     VkMemoryRequirements mr; pvkGetImageMemoryRequirements(g_dev, out->img, &mr);
     VKCK(nvmtl_alloc_opaque_image_mem(&mr, &out->mem, &out->sysmem, "depth"), "vkAllocateMemory(depth)");
     out->alloc = mr.size;
-    VKCK(pvkBindImageMemory(g_dev, out->img, out->mem, 0), "vkBindImageMemory(depth)");
+    VKCK(NVMTL_CENSUS_VK(pvkBindImageMemory(g_dev, out->img, out->mem, 0)), "vkBindImageMemory(depth)");
     VkImageViewType vt = out->mtl_type == 3 || out->mtl_type == 8 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : out->mtl_type == 5 ? VK_IMAGE_VIEW_TYPE_CUBE
                        : out->mtl_type == 6 ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
     VkImageViewCreateInfo vci = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, NULL, 0, out->img, vt,
@@ -3599,7 +3663,7 @@ static VkResult nvmtl_make_render_pass(const nvk_pipeline *p, uint32_t load, VkR
         { 0, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_INPUT_ATTACHMENT_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT } };
     VkRenderPassCreateInfo rpci = { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, NULL, 0, n, atts, 1, &sp, fetch ? 3u : 2u, deps };
-    return pvkCreateRenderPass(g_dev, &rpci, NULL, out);
+    return NVMTL_CENSUS_VK(pvkCreateRenderPass(g_dev, &rpci, NULL, out));
 }
 int nvmtl_vk_pipeline_create_blend(const void *vs, size_t vn, const void *fs, size_t fn, uint32_t vkfmt, uint32_t depthfmt, const nvk_blend_state *blend, nvk_pipeline *out)
 { return nvmtl_vk_pipeline_create_vin(vs, vn, fs, fn, vkfmt, depthfmt, blend, NULL, out); }
@@ -4094,8 +4158,8 @@ static int nvmtl_vk_pipeline_create_impl_lifetime_body(const void *vs, size_t vn
     nvmtl_spirv_retarget_set(fcopy, fn / 4, 1);
     VkShaderModuleCreateInfo fsm = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, NULL, 0, fn, fcopy };
     VkShaderModule vmod = VK_NULL_HANDLE, fmod = VK_NULL_HANDLE, tvm = VK_NULL_HANDLE, tcm = VK_NULL_HANDLE;
-    NVMTL_PIPELINE_STAGE(pvkCreateShaderModule(g_dev, &vsm, NULL, &vmod), "vkCreateShaderModule(vertex)");
-    NVMTL_PIPELINE_STAGE(pvkCreateShaderModule(g_dev, &fsm, NULL, &fmod), "vkCreateShaderModule(fragment)");
+    NVMTL_PIPELINE_STAGE(NVMTL_CENSUS_VK(pvkCreateShaderModule(g_dev, &vsm, NULL, &vmod)), "vkCreateShaderModule(vertex)");
+    NVMTL_PIPELINE_STAGE(NVMTL_CENSUS_VK(pvkCreateShaderModule(g_dev, &fsm, NULL, &fmod)), "vkCreateShaderModule(fragment)");
     VkPipelineShaderStageCreateInfo stages[4] = {
         { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, td ? VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT : VK_SHADER_STAGE_VERTEX_BIT, vmod, "main", NULL },
         { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, fmod, "main", NULL } };
@@ -4103,8 +4167,8 @@ static int nvmtl_vk_pipeline_create_impl_lifetime_body(const void *vs, size_t vn
     if (td) {
         VkShaderModuleCreateInfo tvi = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, NULL, 0, tvsd.length, (const uint32_t *)tvsd.bytes };
         VkShaderModuleCreateInfo tci = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, NULL, 0, ttcd.length, (const uint32_t *)ttcd.bytes };
-        NVMTL_PIPELINE_STAGE(pvkCreateShaderModule(g_dev, &tvi, NULL, &tvm), "vkCreateShaderModule(tessellation vertex)");
-        NVMTL_PIPELINE_STAGE(pvkCreateShaderModule(g_dev, &tci, NULL, &tcm), "vkCreateShaderModule(tessellation control)");
+        NVMTL_PIPELINE_STAGE(NVMTL_CENSUS_VK(pvkCreateShaderModule(g_dev, &tvi, NULL, &tvm)), "vkCreateShaderModule(tessellation vertex)");
+        NVMTL_PIPELINE_STAGE(NVMTL_CENSUS_VK(pvkCreateShaderModule(g_dev, &tci, NULL, &tcm)), "vkCreateShaderModule(tessellation control)");
         stages[nstages++] = (VkPipelineShaderStageCreateInfo){ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, tvm, "main", NULL };
         stages[nstages++] = (VkPipelineShaderStageCreateInfo){ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, tcm, "main", NULL };
     }
@@ -4320,7 +4384,7 @@ static int nvmtl_vk_compute_pipeline_create_g_lifetime_body(const void *cs, size
     out->bmask_ok = (uint32_t)nvmtl_spirv_bmask(cs, n, out->bmask);
     VkShaderModuleCreateInfo smi = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, NULL, 0, n, (const uint32_t *)cs };
     VkShaderModule mod = VK_NULL_HANDLE;
-    VKCK(pvkCreateShaderModule(g_dev, &smi, NULL, &mod), "vkCreateShaderModule(compute)");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateShaderModule(g_dev, &smi, NULL, &mod)), "vkCreateShaderModule(compute)");
     out->mod = mod;
     VkDescriptorSetLayout sl2c[3] = { g_setLayout, g_setLayout, g_heapLayout };
     VkPushConstantRange pcr = { VK_SHADER_STAGE_COMPUTE_BIT, 0, NVMTL_DISPATCH_PC_BYTES };
@@ -4401,7 +4465,7 @@ static VkPipeline nvmtl_compute_variant(nvk_pipeline *p, const uint32_t l[3])
         VkComputePipelineCreateInfo cpi = { VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, NULL, 0,
             { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_COMPUTE_BIT, (VkShaderModule)p->mod, "main", &si },
             (VkPipelineLayout)p->layout, VK_NULL_HANDLE, -1 };
-        VkResult r = pvkCreateComputePipelines(g_dev, VK_NULL_HANDLE, 1, &cpi, NULL, &found);
+        VkResult r = NVMTL_CENSUS_VK(pvkCreateComputePipelines(g_dev, VK_NULL_HANDLE, 1, &cpi, NULL, &found));
         if (r != VK_SUCCESS) {
             if (found) pvkDestroyPipeline(g_dev, found, NULL);
             nvlog("vk: compute variant %ux%ux%u -> %d — this dispatch is SKIPPED", l[0], l[1], l[2], r); found = VK_NULL_HANDLE;
@@ -4697,7 +4761,7 @@ int nvmtl_vk_cmd_begin(nvk_queue *q, nvk_cmdbuf *out)
     VkCommandPool pool = nvmtl_keep_pool_pop();
     VkCommandPoolCreateInfo cpci = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, NULL,
         VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, g_qfam };
-    VkResult result = pool != VK_NULL_HANDLE ? VK_SUCCESS : pvkCreateCommandPool(g_dev, &cpci, NULL, &pool);
+    VkResult result = pool != VK_NULL_HANDLE ? VK_SUCCESS : NVMTL_CENSUS_VK(pvkCreateCommandPool(g_dev, &cpci, NULL, &pool));
     if (result != VK_SUCCESS) { nvlog("vk: recording pool creation -> %d", result); return nvmtl_cmd_refused(NVMTL_REFUSE_POOL, result); }
     out->pool = pool;
     VkCommandBufferAllocateInfo ai = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, NULL, pool,
@@ -4711,7 +4775,7 @@ int nvmtl_vk_cmd_begin(nvk_queue *q, nvk_cmdbuf *out)
     if (pvkGetCalibratedTimestampsEXT && g_timestamp_bits) {
         VkQueryPoolCreateInfo qi = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, NULL, 0, VK_QUERY_TYPE_TIMESTAMP, 2, 0 };
         VkQueryPool timing = nvmtl_tspool_pop();
-        if (timing != VK_NULL_HANDLE || pvkCreateQueryPool(g_dev, &qi, NULL, &timing) == VK_SUCCESS) {
+        if (timing != VK_NULL_HANDLE || NVMTL_CENSUS_VK(pvkCreateQueryPool(g_dev, &qi, NULL, &timing)) == VK_SUCCESS) {
             out->timing_pool = timing;
             pvkCmdResetQueryPool(out->cb, timing, 0, 2);
             pvkCmdWriteTimestamp(out->cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timing, 0);
@@ -4926,7 +4990,7 @@ int nvmtl_vk_cmd_begin_pass(nvk_cmdbuf *c, const nvk_pass *ps, nvk_pipeline *p)
     VkFramebufferCreateInfo fci = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, NULL, 0, rpShape ? (VkRenderPass)rpShape : p->rp,
         nviews, views, ps->w, ps->h, ps->layers > 1 ? ps->layers : 1 };
     VkFramebuffer fb = VK_NULL_HANDLE;
-    VKCK(pvkCreateFramebuffer(g_dev, &fci, NULL, &fb), "vkCreateFramebuffer");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateFramebuffer(g_dev, &fci, NULL, &fb)), "vkCreateFramebuffer");
     c->fb = fb;
     if (c->nfb == c->capfb) {
         unsigned cap = c->capfb ? c->capfb * 2 : 16;
@@ -4964,7 +5028,7 @@ int nvmtl_vk_cmd_begin_pass(nvk_cmdbuf *c, const nvk_pass *ps, nvk_pipeline *p)
     { extern int nvmtl_pt_armed(void);
       if (nvmtl_pt_armed() && c->pt_n < 128 && g_timestamp_bits) {
           if (!c->pt_pool) { VkQueryPoolCreateInfo qi = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, NULL, 0, VK_QUERY_TYPE_TIMESTAMP, 256, 0 };
-              VkQueryPool qp; if (pvkCreateQueryPool(g_dev, &qi, NULL, &qp) == VK_SUCCESS) { pvkCmdResetQueryPool(c->cb, qp, 0, 256); c->pt_pool = (void *)qp; } }
+              VkQueryPool qp; if (NVMTL_CENSUS_VK(pvkCreateQueryPool(g_dev, &qi, NULL, &qp)) == VK_SUCCESS) { pvkCmdResetQueryPool(c->cb, qp, 0, 256); c->pt_pool = (void *)qp; } }
           if (c->pt_pool) { pvkCmdWriteTimestamp(c->cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, (VkQueryPool)c->pt_pool, 2 * c->pt_n);
               c->pt_w[c->pt_n] = ps->w; c->pt_h[c->pt_n] = ps->h; c->pt_f[c->pt_n] = ncol ? cf[0] : (p->has_depth ? 1000u + p->dfmt : 0u); c->pt_open = 1;
               memset(c->pt_fs[c->pt_n], 0, sizeof c->pt_fs[c->pt_n]); }
@@ -5076,7 +5140,7 @@ int nvmtl_vk_cmd_attachment_view_n(nvk_cmdbuf *c, nvk_image *img, int depth, uin
         VkImageViewCreateInfo vci = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, NULL, 0, (VkImage)img->img,
             nlayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D, (VkFormat)img->fmt, { 0 }, { asp, level, 1, slice, nlayers } };
         VkImageView vv = VK_NULL_HANDLE;
-        VkResult r = pvkCreateImageView(g_dev, &vci, NULL, &vv);
+        VkResult r = NVMTL_CENSUS_VK(pvkCreateImageView(g_dev, &vci, NULL, &vv));
         if (r != VK_SUCCESS) { nvlog("encoder: par1 depth attachment view level %u slices [%u,%u) -> %d — pass REFUSED", level, slice, slice + nlayers, r); return -1; }
         v = (void *)vv;
     } else {
@@ -5163,7 +5227,7 @@ static VkResult nvmtl_make_render_pass_shape(const nvk_pipeline *p, uint32_t loa
         { VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2, NULL, 0, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_INPUT_ATTACHMENT_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0 } };
     VkRenderPassCreateInfo2 rci = { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2, NULL, 0, n, atts, 1, &sp, fetch ? 3u : 2u, deps2, 0, NULL };
-    return pvkCreateRenderPass2(g_dev, &rci, NULL, out);
+    return NVMTL_CENSUS_VK(pvkCreateRenderPass2(g_dev, &rci, NULL, out));
 }
 typedef struct { uint64_t identity; uint32_t load, prm, dmode, smode; void *rp; } nvmtl_shape_rp;
 static uint64_t g_shape_identity;
@@ -5230,7 +5294,7 @@ int nvmtl_vk_image_view_create_range_swz(nvk_image *img, uint32_t vkfmt, int a8,
                (VkImageUsageFlags)(img->usage ? img->usage : (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) & ~(VkImageUsageFlags)VK_IMAGE_USAGE_STORAGE_BIT };
            if (uci.usage) vci.pNext = &uci; }
     VkImageView vv = VK_NULL_HANDLE;
-    VKCK(pvkCreateImageView(g_dev, &vci, NULL, &vv), "vkCreateImageView(swizzle)");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateImageView(g_dev, &vci, NULL, &vv)), "vkCreateImageView(swizzle)");
     *out_view = vv;
     return 0;
 }
@@ -5312,9 +5376,9 @@ static void nvmtl_vk_zero_dummies(void)
     nvk_image *imgs[2] = { &g_dummyImg, g_dummyStex.view ? &g_dummyStex : NULL };
     VkCommandPool pool = VK_NULL_HANDLE; VkCommandBuffer cb = VK_NULL_HANDLE; VkFence fence = VK_NULL_HANDLE;
     VkCommandPoolCreateInfo cpci = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, NULL, 0, g_qfam };
-    if (pvkCreateCommandPool(g_dev, &cpci, NULL, &pool) != VK_SUCCESS) { nvlog("vk: dummy zero-fill SKIPPED — vkCreateCommandPool failed; an unbound texture still samples uninitialised memory"); return; }
+    if (NVMTL_CENSUS_VK(pvkCreateCommandPool(g_dev, &cpci, NULL, &pool)) != VK_SUCCESS) { nvlog("vk: dummy zero-fill SKIPPED — vkCreateCommandPool failed; an unbound texture still samples uninitialised memory"); return; }
     VkCommandBufferAllocateInfo cbai = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, NULL, pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1 };
-    if (pvkAllocateCommandBuffers(g_dev, &cbai, &cb) != VK_SUCCESS) { nvlog("vk: dummy zero-fill SKIPPED — vkAllocateCommandBuffers failed; an unbound texture still samples uninitialised memory"); return; }
+    if (NVMTL_CENSUS_VK(pvkAllocateCommandBuffers(g_dev, &cbai, &cb)) != VK_SUCCESS) { nvlog("vk: dummy zero-fill SKIPPED — vkAllocateCommandBuffers failed; an unbound texture still samples uninitialised memory"); return; }
     VkCommandBufferBeginInfo bi = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL };
     if (pvkBeginCommandBuffer(cb, &bi) != VK_SUCCESS) { nvlog("vk: dummy zero-fill SKIPPED — vkBeginCommandBuffer failed; an unbound texture still samples uninitialised memory"); return; }
     VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
@@ -5335,7 +5399,7 @@ static void nvmtl_vk_zero_dummies(void)
     }
     if (pvkEndCommandBuffer(cb) != VK_SUCCESS) { nvlog("vk: dummy zero-fill SKIPPED — vkEndCommandBuffer failed; an unbound texture still samples uninitialised memory"); return; }
     VkFenceCreateInfo fci = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, NULL, 0 };
-    if (pvkCreateFence(g_dev, &fci, NULL, &fence) != VK_SUCCESS) { nvlog("vk: dummy zero-fill SKIPPED — vkCreateFence failed; an unbound texture still samples uninitialised memory"); return; }
+    if (NVMTL_CENSUS_VK(pvkCreateFence(g_dev, &fci, NULL, &fence)) != VK_SUCCESS) { nvlog("vk: dummy zero-fill SKIPPED — vkCreateFence failed; an unbound texture still samples uninitialised memory"); return; }
     VkSubmitInfo si = { VK_STRUCTURE_TYPE_SUBMIT_INFO, NULL, 0, NULL, NULL, 1, &cb, 0, NULL };
     VkResult sr = pvkQueueSubmit(g_queue, 1, &si, fence);
     if (sr != VK_SUCCESS) { nvlog("vk: dummy zero-fill FAILED — vkQueueSubmit -> %d; an unbound texture still samples uninitialised memory", sr); pvkDestroyFence(g_dev, fence, NULL); return; }
@@ -5749,7 +5813,7 @@ int nvmtl_vk_submit_begin_at(nvk_cmdbuf *c, nvmtl_inflight *f, const char *who)
     const uint64_t sB = nvmtl_perf_now();
     if (result != VK_SUCCESS) { nvmtl_cmd_retire(c); return -1; }
     VkFenceCreateInfo fci = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO }; VkFence fence;
-    result = pvkCreateFence(g_dev, &fci, NULL, &fence);
+    result = NVMTL_CENSUS_VK(pvkCreateFence(g_dev, &fci, NULL, &fence));
     const uint64_t sC = nvmtl_perf_now();
     if (result != VK_SUCCESS) { nvmtl_cmd_retire(c); return -1; }
     nvmtl_prologue *const pre = &f->pre;
@@ -5970,15 +6034,15 @@ int nvmtl_vk_image_reback(nvk_image *i, int to_sysmem, int a8)
     }
     if (mt < 0) { pvkDestroyImage(g_dev, img, NULL); return -1; }
     VkMemoryAllocateInfo mai = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, NULL, mr.size, (uint32_t)mt };
-    if (pvkAllocateMemory(g_dev, &mai, NULL, &mem) != VK_SUCCESS) { pvkDestroyImage(g_dev, img, NULL); if (!to_sysmem) g_res1_refused++; return to_sysmem ? -1 : 1; }
-    if (pvkBindImageMemory(g_dev, img, mem, 0) != VK_SUCCESS) { pvkFreeMemory(g_dev, mem, NULL); pvkDestroyImage(g_dev, img, NULL); return -1; }
+    if (NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, &mem)) != VK_SUCCESS) { pvkDestroyImage(g_dev, img, NULL); if (!to_sysmem) g_res1_refused++; return to_sysmem ? -1 : 1; }
+    if (NVMTL_CENSUS_VK(pvkBindImageMemory(g_dev, img, mem, 0)) != VK_SUCCESS) { pvkFreeMemory(g_dev, mem, NULL); pvkDestroyImage(g_dev, img, NULL); return -1; }
     VkComponentMapping swz = a8 ? (VkComponentMapping){ VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_R }
                                 : (VkComponentMapping){ 0, 0, 0, 0 };
     VkImageViewType viewType = t == 0 ? VK_IMAGE_VIEW_TYPE_1D : t == 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : t == 3 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
                              : t == 5 ? VK_IMAGE_VIEW_TYPE_CUBE : t == 6 ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : t == 7 ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D;
     VkImageViewCreateInfo vci = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, NULL, 0, img, viewType,
         (VkFormat)i->fmt, swz, { VK_IMAGE_ASPECT_COLOR_BIT, 0, i->mips ? i->mips : 1, 0, t == 7 ? 1 : i->layers } };
-    if (pvkCreateImageView(g_dev, &vci, NULL, &view) != VK_SUCCESS) { pvkFreeMemory(g_dev, mem, NULL); pvkDestroyImage(g_dev, img, NULL); return -1; }
+    if (NVMTL_CENSUS_VK(pvkCreateImageView(g_dev, &vci, NULL, &view)) != VK_SUCCESS) { pvkFreeMemory(g_dev, mem, NULL); pvkDestroyImage(g_dev, img, NULL); return -1; }
     if (i->view) pvkDestroyImageView(g_dev, (VkImageView)i->view, NULL);
     pvkDestroyImage(g_dev, (VkImage)i->img, NULL);
     if (i->mem) { pvkFreeMemory(g_dev, (VkDeviceMemory)i->mem, NULL); g_alloc_bytes -= i->alloc; if (i->sysmem) { g_sys_bytes -= i->alloc; g_sys_align -= (i->alloc + 65535ull) & ~65535ull; } else { g_vram_bytes -= i->alloc; g_img_align -= (i->alloc + 65535ull) & ~65535ull; }    }
@@ -6048,15 +6112,15 @@ int nvmtl_vk_image_migrate(nvk_image *i, int to_sysmem, int a8, nvk_image *old_o
     }
     if (mt < 0) { pvkDestroyImage(g_dev, img, NULL); return -1; }
     VkMemoryAllocateInfo mai = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, NULL, mr.size, (uint32_t)mt };
-    if (pvkAllocateMemory(g_dev, &mai, NULL, &mem) != VK_SUCCESS) { pvkDestroyImage(g_dev, img, NULL); return to_sysmem ? -1 : 1; }
-    if (pvkBindImageMemory(g_dev, img, mem, 0) != VK_SUCCESS) goto fail;
+    if (NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, &mem)) != VK_SUCCESS) { pvkDestroyImage(g_dev, img, NULL); return to_sysmem ? -1 : 1; }
+    if (NVMTL_CENSUS_VK(pvkBindImageMemory(g_dev, img, mem, 0)) != VK_SUCCESS) goto fail;
     { VkComponentMapping swz = a8 ? (VkComponentMapping){ VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_R }
                                   : (VkComponentMapping){ 0, 0, 0, 0 };
       VkImageViewType vt = t == 0 ? VK_IMAGE_VIEW_TYPE_1D : t == 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : t == 3 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
                          : t == 5 ? VK_IMAGE_VIEW_TYPE_CUBE : t == 6 ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : t == 7 ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D;
       VkImageViewCreateInfo vci = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, NULL, 0, img, vt, (VkFormat)i->fmt, swz,
                                     { VK_IMAGE_ASPECT_COLOR_BIT, 0, mips, 0, nl } };
-      if (pvkCreateImageView(g_dev, &vci, NULL, &view) != VK_SUCCESS) goto fail; }
+      if (NVMTL_CENSUS_VK(pvkCreateImageView(g_dev, &vci, NULL, &view)) != VK_SUCCESS) goto fail; }
     const VkImageLayout was = (VkImageLayout)i->layout;
     if (was != VK_IMAGE_LAYOUT_UNDEFINED) {
         nvk_cmdbuf c0, *cp = t_mig_batch; if (!cp) { if (nvmtl_vk_cmd_begin(NULL, &c0)) goto fail; cp = &c0; }
@@ -6107,12 +6171,12 @@ int nvmtl_vk_buffer_migrate(nvk_buffer *b, int to_sysmem)
     VkMemoryAllocateFlagsInfo mafi = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO, NULL, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT, 0 };
     VkMemoryAllocateInfo mai = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &mafi, mr.size, (uint32_t)mt };
     VkDeviceMemory nm = VK_NULL_HANDLE;
-    if (pvkAllocateMemory(g_dev, &mai, NULL, &nm) != VK_SUCCESS) return to_sysmem ? -1 : 1;
+    if (NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, &nm)) != VK_SUCCESS) return to_sysmem ? -1 : 1;
     VkBufferCreateInfo tci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, mr.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                VK_SHARING_MODE_EXCLUSIVE, 0, NULL };
     VkBuffer tmp = VK_NULL_HANDLE;
-    if (pvkCreateBuffer(g_dev, &tci, NULL, &tmp) != VK_SUCCESS) { pvkFreeMemory(g_dev, nm, NULL); return -1; }
-    if (pvkBindBufferMemory(g_dev, tmp, nm, 0) != VK_SUCCESS) { pvkDestroyBuffer(g_dev, tmp, NULL); pvkFreeMemory(g_dev, nm, NULL); return -1; }
+    if (NVMTL_CENSUS_VK(pvkCreateBuffer(g_dev, &tci, NULL, &tmp)) != VK_SUCCESS) { pvkFreeMemory(g_dev, nm, NULL); return -1; }
+    if (NVMTL_CENSUS_VK(pvkBindBufferMemory(g_dev, tmp, nm, 0)) != VK_SUCCESS) { pvkDestroyBuffer(g_dev, tmp, NULL); pvkFreeMemory(g_dev, nm, NULL); return -1; }
     { nvk_cmdbuf c; if (nvmtl_vk_cmd_begin(NULL, &c)) { pvkDestroyBuffer(g_dev, tmp, NULL); pvkFreeMemory(g_dev, nm, NULL); return -1; }
       VkMemoryBarrier pre = { VK_STRUCTURE_TYPE_MEMORY_BARRIER, NULL, VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT };
       pvkCmdPipelineBarrier(c.cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &pre, 0, NULL, 0, NULL);
@@ -6608,7 +6672,7 @@ int nvmtl_vk_accel_create(nvk_buffer *backing, size_t size, int instance, nvk_ac
     VkAccelerationStructureCreateInfoKHR ci = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR, NULL, 0, (VkBuffer)backing->buf, 0, size,
         instance ? VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR : VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, 0 };
     VkAccelerationStructureKHR as;
-    VKCK(pvkCreateAccelerationStructureKHR(g_dev, &ci, NULL, &as), "vkCreateAccelerationStructureKHR");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateAccelerationStructureKHR(g_dev, &ci, NULL, &as)), "vkCreateAccelerationStructureKHR");
     VkAccelerationStructureDeviceAddressInfoKHR ai = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR, NULL, as };
     out->as = as; out->addr = pvkGetAccelerationStructureDeviceAddressKHR(g_dev, &ai); out->size = size; out->instance = instance;
     return 0;
@@ -6720,7 +6784,7 @@ int nvmtl_vk_image_view_create_ex(nvk_image *img, uint32_t vkfmt, int a8, uint32
     if (vg < 0) return -1;
     if (vg > 0) vci.pNext = &uci;
     VkImageView v = VK_NULL_HANDLE;
-    VKCK(pvkCreateImageView(g_dev, &vci, NULL, &v), "vkCreateImageView(view)");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateImageView(g_dev, &vci, NULL, &v)), "vkCreateImageView(view)");
     *out_view = v;
     return 0;
 }
@@ -6733,7 +6797,7 @@ int nvmtl_vk_image_view_create_aspect(nvk_image *img, uint32_t vkfmt, uint32_t a
     VkImageViewCreateInfo vci = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, NULL, 0, (VkImage)img->img,
         nvmtl_vk_view_type_of(img), (VkFormat)vkfmt, { 0 }, { (VkImageAspectFlags)aspect, baseLevel, levelCount, 0, nvmtl_vk_view_layers_of(img) } };
     VkImageView v = VK_NULL_HANDLE;
-    VKCK(pvkCreateImageView(g_dev, &vci, NULL, &v), "vkCreateImageView(aspect view)");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateImageView(g_dev, &vci, NULL, &v)), "vkCreateImageView(aspect view)");
     *out_view = v;
     return 0;
 }
@@ -6753,17 +6817,17 @@ int nvmtl_vk_texel_view_create(nvk_buffer *b, size_t offset, size_t range, uint3
     VkBufferCreateInfo bci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, range,
         VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | (st ? VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT : 0), VK_SHARING_MODE_EXCLUSIVE, 0, NULL };
     VkBuffer ab = VK_NULL_HANDLE;
-    VKCK(pvkCreateBuffer(g_dev, &bci, NULL, &ab), "vkCreateBuffer(texel alias)");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateBuffer(g_dev, &bci, NULL, &ab)), "vkCreateBuffer(texel alias)");
     VkMemoryRequirements mr; pvkGetBufferMemoryRequirements(g_dev, ab, &mr);
     const VkDeviceSize at = (VkDeviceSize)b->moff + offset;
     if (mr.alignment && at % mr.alignment) {
         nvlog("texel buffer: offset %llu is not a multiple of the texel alignment %llu — refused", (unsigned long long)at, (unsigned long long)mr.alignment);
         pvkDestroyBuffer(g_dev, ab, NULL); return -1; }
-    VkResult r = pvkBindBufferMemory(g_dev, ab, (VkDeviceMemory)b->mem, at);
+    VkResult r = NVMTL_CENSUS_VK(pvkBindBufferMemory(g_dev, ab, (VkDeviceMemory)b->mem, at));
     if (r != VK_SUCCESS) { nvlog("texel buffer: vkBindBufferMemory(alias) -> %d", r); pvkDestroyBuffer(g_dev, ab, NULL); return -1; }
     VkBufferViewCreateInfo vci = { VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO, NULL, 0, ab, (VkFormat)vkfmt, 0, range };
     VkBufferView v = VK_NULL_HANDLE;
-    r = pvkCreateBufferView(g_dev, &vci, NULL, &v);
+    r = NVMTL_CENSUS_VK(pvkCreateBufferView(g_dev, &vci, NULL, &v));
     if (r != VK_SUCCESS) { nvlog("texel buffer: vkCreateBufferView -> %d", r); pvkDestroyBuffer(g_dev, ab, NULL); return -1; }
     *alias = ab; *view = v; if (storage_ok) *storage_ok = st;
     return 0;
@@ -6847,17 +6911,17 @@ static int nvmtl_visibility_sum_init(void)
     VkShaderModule mod = VK_NULL_HANDLE;
     VkShaderModuleCreateInfo sm = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, NULL, 0,
                                    sizeof nvmtl_visibility_sum_spv, nvmtl_visibility_sum_spv };
-    if (pvkCreateShaderModule(g_dev, &sm, NULL, &mod) != VK_SUCCESS) goto done;
+    if (NVMTL_CENSUS_VK(pvkCreateShaderModule(g_dev, &sm, NULL, &mod)) != VK_SUCCESS) goto done;
     VkPushConstantRange push = { VK_SHADER_STAGE_COMPUTE_BIT, 0, 24 };
     VkPipelineLayoutCreateInfo li = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, NULL, 0, 0, NULL, 1, &push };
     VkPipelineLayout layout = VK_NULL_HANDLE;
-    if (pvkCreatePipelineLayout(g_dev, &li, NULL, &layout) == VK_SUCCESS) {
+    if (NVMTL_CENSUS_VK(pvkCreatePipelineLayout(g_dev, &li, NULL, &layout)) == VK_SUCCESS) {
         VkPipelineShaderStageCreateInfo stage = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
                                                  VK_SHADER_STAGE_COMPUTE_BIT, mod, "main", NULL };
         VkComputePipelineCreateInfo pi = { VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, NULL, 0,
                                           stage, layout, VK_NULL_HANDLE, -1 };
         VkPipeline pipeline = VK_NULL_HANDLE;
-        if (pvkCreateComputePipelines(g_dev, VK_NULL_HANDLE, 1, &pi, NULL, &pipeline) == VK_SUCCESS) {
+        if (NVMTL_CENSUS_VK(pvkCreateComputePipelines(g_dev, VK_NULL_HANDLE, 1, &pi, NULL, &pipeline)) == VK_SUCCESS) {
             g_visibility_sum_layout = layout; g_visibility_sum_pipeline = pipeline; rc = 0;
         } else {
             if (pipeline) pvkDestroyPipeline(g_dev, pipeline, NULL);
@@ -6915,7 +6979,7 @@ int nvmtl_vk_cmd_alloc_occlusion(nvk_cmdbuf *c, uint32_t *query)
         if (!p) return -1;
         VkQueryPoolCreateInfo qi = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, NULL, 0,
                                     VK_QUERY_TYPE_OCCLUSION, NVMTL_OCCLUSION_PAGE, 0 };
-        if (pvkCreateQueryPool(g_dev, &qi, NULL, &p->pool) != VK_SUCCESS) { free(p); return -1; }
+        if (NVMTL_CENSUS_VK(pvkCreateQueryPool(g_dev, &qi, NULL, &p->pool)) != VK_SUCCESS) { free(p); return -1; }
         pvkResetQueryPool(g_dev, p->pool, 0, NVMTL_OCCLUSION_PAGE);
         p->base = idx; p->next = c->occlusion_pages; c->occlusion_pages = p;
     }
@@ -7068,7 +7132,7 @@ int nvmtl_vk_cmd_ts_write(nvk_cmdbuf *c, void *pool, uint32_t idx, int barrier)
         if (!p) return nvmtl_counter_fail(c);
         VkQueryPoolCreateInfo qi = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, NULL, 0,
             VK_QUERY_TYPE_TIMESTAMP, NVMTL_COUNTER_PAGE, 0 };
-        if (pvkCreateQueryPool(g_dev, &qi, NULL, &p->pool) != VK_SUCCESS) { free(p); return nvmtl_counter_fail(c); }
+        if (NVMTL_CENSUS_VK(pvkCreateQueryPool(g_dev, &qi, NULL, &p->pool)) != VK_SUCCESS) { free(p); return nvmtl_counter_fail(c); }
         p->next = r->pages; r->pages = p;
         pvkCmdResetQueryPool(r->reset.cb, p->pool, 0, NVMTL_COUNTER_PAGE);
     }
@@ -7110,7 +7174,7 @@ int nvmtl_vk_gpu_timestamp(uint64_t *cpu_ns, uint64_t *gpu)
             VkQueryPoolCreateInfo qi = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, NULL, 0,
                 VK_QUERY_TYPE_TIMESTAMP, 1, 0 };
             VkQueryPool pool = VK_NULL_HANDLE;
-            if (pvkCreateQueryPool(g_dev, &qi, NULL, &pool) == VK_SUCCESS) g_cal_pool = pool;
+            if (NVMTL_CENSUS_VK(pvkCreateQueryPool(g_dev, &qi, NULL, &pool)) == VK_SUCCESS) g_cal_pool = pool;
         }
         uint64_t best = UINT64_MAX; int64_t off = 0;
         for (int k = 0; g_cal_pool && k < 3; k++) {
@@ -7291,7 +7355,7 @@ static uint32_t heap_memtype_bits(void)
     bits = ~0u;
     VkBufferCreateInfo bci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, 4096, NVMTL_BUFFER_USAGE, VK_SHARING_MODE_EXCLUSIVE, 0, NULL };
     VkBuffer b = VK_NULL_HANDLE;
-    if (pvkCreateBuffer(g_dev, &bci, NULL, &b) == VK_SUCCESS) { VkMemoryRequirements mr; pvkGetBufferMemoryRequirements(g_dev, b, &mr); bits &= mr.memoryTypeBits; pvkDestroyBuffer(g_dev, b, NULL); }
+    if (NVMTL_CENSUS_VK(pvkCreateBuffer(g_dev, &bci, NULL, &b)) == VK_SUCCESS) { VkMemoryRequirements mr; pvkGetBufferMemoryRequirements(g_dev, b, &mr); bits &= mr.memoryTypeBits; pvkDestroyBuffer(g_dev, b, NULL); }
     VkImageCreateInfo ici = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, NULL, 0, VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, { 64, 64, 1 }, 1, 1,
         VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -7327,11 +7391,11 @@ static int nvmtl_vk_heap_create_body(size_t size, int host_visible, nvk_heap *ou
     VkDeviceMemory mem = VK_NULL_HANDLE;
     { uint64_t hbud = 0, hused = 0, hfree = 0; int hmeas = 0;
       int hgate = host_visible ? 0 : nvmtl_vk_vram_wall(size, &hfree, &hbud, &hused, &hmeas);
-      VkResult r_ = hgate ? VK_ERROR_OUT_OF_DEVICE_MEMORY : pvkAllocateMemory(g_dev, &mai, NULL, &mem);
+      VkResult r_ = hgate ? VK_ERROR_OUT_OF_DEVICE_MEMORY : NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, &mem));
       if (r_ == VK_SUCCESS && !host_visible) nvmtl_vk_budget_charge(size);
       if (r_ == VK_ERROR_OUT_OF_DEVICE_MEMORY && !host_visible) {
           int mt2 = -1; for (uint32_t i = 0; i < g_memp.memoryTypeCount; i++) if ((bits & (1u << i)) && !(g_memp.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) { mt2 = (int)i; break; }
-          if (mt2 >= 0) { mai.memoryTypeIndex = (uint32_t)mt2; r_ = pvkAllocateMemory(g_dev, &mai, NULL, &mem); mt = mt2;
+          if (mt2 >= 0) { mai.memoryTypeIndex = (uint32_t)mt2; r_ = NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &mai, NULL, &mem)); mt = mt2;
               if (r_ == VK_SUCCESS) { g_heap_vram_refused++;
                   nvlog("vk: private placement heap of %zu bytes REFUSED VRAM (%s) -> SYSTEM MEMORY: %llu MB free, "
                         "%llu MB headroom, heapUsage %llu of budget %llu MB (%s), %llu heaps refused so far",
@@ -7343,7 +7407,7 @@ static int nvmtl_vk_heap_create_body(size_t size, int host_visible, nvk_heap *ou
       if (r_ != VK_SUCCESS) { nvlog("vk: vkAllocateMemory(placement heap) -> %d", r_); return -1; } }
     out->mem = mem; out->memtype = (uint32_t)mt;
     if (host_visible) {
-        VkResult mapped = pvkMapMemory(g_dev, mem, 0, VK_WHOLE_SIZE, 0, &out->map);
+        VkResult mapped = NVMTL_CENSUS_VK(pvkMapMemory(g_dev, mem, 0, VK_WHOLE_SIZE, 0, &out->map));
         if (mapped != VK_SUCCESS) { pvkFreeMemory(g_dev, mem, NULL); memset(out, 0, sizeof *out); return -1; }
     }
     g_alloc_bytes += size;
@@ -7371,13 +7435,13 @@ int nvmtl_vk_buffer_create_placed(size_t size, nvk_heap *heap, size_t offset, nv
     VKCK(nvmtl_opaque_CreateBuffer(g_dev, &bci, NULL, &out->buf), "vkCreateBuffer(placed)");
     VkMemoryRequirements mr; pvkGetBufferMemoryRequirements(g_dev, out->buf, &mr);
     if (placed_ok(&mr, heap, offset, "placed buffer")) { pvkDestroyBuffer(g_dev, (VkBuffer)out->buf, NULL); memset(out, 0, sizeof *out); return -1; }
-    if (pvkBindBufferMemory(g_dev, out->buf, (VkDeviceMemory)heap->mem, offset) != VK_SUCCESS) {
+    if (NVMTL_CENSUS_VK(pvkBindBufferMemory(g_dev, out->buf, (VkDeviceMemory)heap->mem, offset)) != VK_SUCCESS) {
         pvkDestroyBuffer(g_dev, (VkBuffer)out->buf, NULL); memset(out, 0, sizeof *out); return -1;
     }
     out->mem = heap->mem; out->placed = 1; out->alloc = 0;
     out->moff = offset;
     out->map = heap->map ? (char *)heap->map + offset : NULL;
-    g_buf_made++;
+    g_buf_made++; nvmtl_client_census_buffer();
     return 0;
 }
 
@@ -7388,7 +7452,7 @@ int nvmtl_vk_image_create_buffer_alias(uint32_t w, uint32_t h, uint32_t vkfmt, u
 {
     nvk_image pending = {0};
     int result = nvmtl_vk_image_create_buffer_alias_lifetime_body(w, h, vkfmt, bpp, a8, storage, render, b, offset, row_pitch, &pending);
-    if (result) { nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
+    if (result) { nvmtl_client_census_request("image-create-failed"); nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
     else { nvmtl_commit_image(&pending); *out = pending; }
     return result;
 }
@@ -7467,7 +7531,7 @@ static int nvmtl_vk_image_create_buffer_alias_lifetime_body(uint32_t w, uint32_t
     if (mr.size > b->size - offset)
         nvlog("buffer texture: image size %llu runs %llu B past the buffer's %zu at offset %zu (the tail of the last row, never addressed)",
               (unsigned long long)mr.size, (unsigned long long)(mr.size - (b->size - offset)), b->size, offset);
-    VKCK(pvkBindImageMemory(g_dev, (VkImage)out->img, (VkDeviceMemory)b->mem, at), "vkBindImageMemory(buffer texture)");
+    VKCK(NVMTL_CENSUS_VK(pvkBindImageMemory(g_dev, (VkImage)out->img, (VkDeviceMemory)b->mem, at)), "vkBindImageMemory(buffer texture)");
     out->mem = b->mem; out->placed = 1; out->alloc = 0;
     VkComponentMapping swz = a8 ? (VkComponentMapping){ VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_R }
                                 : (VkComponentMapping){ 0, 0, 0, 0 };
@@ -7499,7 +7563,7 @@ static size_t pool_align(void)
     size_t a = 256;
     VkBufferCreateInfo bci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, 4096, NVMTL_BUFFER_USAGE, VK_SHARING_MODE_EXCLUSIVE, 0, NULL };
     VkBuffer b = VK_NULL_HANDLE;
-    if (pvkCreateBuffer(g_dev, &bci, NULL, &b) == VK_SUCCESS) {
+    if (NVMTL_CENSUS_VK(pvkCreateBuffer(g_dev, &bci, NULL, &b)) == VK_SUCCESS) {
         VkMemoryRequirements mr; pvkGetBufferMemoryRequirements(g_dev, b, &mr);
         if (mr.alignment > a) a = (size_t)mr.alignment;
         pvkDestroyBuffer(g_dev, b, NULL);
@@ -7552,7 +7616,7 @@ static int vpool_heap_create(size_t size, nvk_heap *out)
     if (!bits) {
         VkBufferCreateInfo bci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, 4096, NVMTL_BUFFER_USAGE, VK_SHARING_MODE_EXCLUSIVE, 0, NULL };
         VkBuffer pb = VK_NULL_HANDLE;
-        if (pvkCreateBuffer(g_dev, &bci, NULL, &pb) != VK_SUCCESS) return -1;
+        if (NVMTL_CENSUS_VK(pvkCreateBuffer(g_dev, &bci, NULL, &pb)) != VK_SUCCESS) return -1;
         VkMemoryRequirements mr; pvkGetBufferMemoryRequirements(g_dev, pb, &mr); pvkDestroyBuffer(g_dev, pb, NULL);
         bits = mr.memoryTypeBits; if (!bits) return -1;
     }
@@ -7560,8 +7624,8 @@ static int vpool_heap_create(size_t size, nvk_heap *out)
     VkMemoryAllocateFlagsInfo bf = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO, NULL, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT, 0 };
     VkMemoryAllocateInfo bi = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &bf, size, (uint32_t)bt };
     VkDeviceMemory bm = VK_NULL_HANDLE; void *bp = NULL;
-    VkResult r1 = pvkAllocateMemory(g_dev, &bi, NULL, &bm);
-    VkResult r2 = r1 == VK_SUCCESS ? pvkMapMemory(g_dev, bm, 0, VK_WHOLE_SIZE, 0, &bp) : r1;
+    VkResult r1 = NVMTL_CENSUS_VK(pvkAllocateMemory(g_dev, &bi, NULL, &bm));
+    VkResult r2 = r1 == VK_SUCCESS ? NVMTL_CENSUS_VK(pvkMapMemory(g_dev, bm, 0, VK_WHOLE_SIZE, 0, &bp)) : r1;
     if (r2 != VK_SUCCESS || !bp) {
         if (r1 == VK_SUCCESS && r2 == VK_SUCCESS) pvkUnmapMemory(g_dev, bm);
         if (bm) pvkFreeMemory(g_dev, bm, NULL);
@@ -7637,7 +7701,7 @@ int nvmtl_vk_image_create_typed_placed(uint32_t w, uint32_t h, uint32_t vkfmt, u
 {
     nvk_image pending = {0};
     int result = nvmtl_vk_image_create_typed_placed_lifetime_body(w, h, vkfmt, bpp, a8, mips, storage, mtl_type, layers, heap, offset, &pending);
-    if (result) { nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
+    if (result) { nvmtl_client_census_request("image-create-failed"); nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
     else { nvmtl_commit_image(&pending); *out = pending; }
     return result;
 }
@@ -7662,7 +7726,7 @@ static int nvmtl_vk_image_create_typed_placed_lifetime_body(uint32_t w, uint32_t
     VKCK(nvmtl_opaque_CreateImage(g_dev, &ici, NULL, &out->img), "vkCreateImage(placed)");
     VkMemoryRequirements mr; pvkGetImageMemoryRequirements(g_dev, out->img, &mr);
     if (placed_ok(&mr, heap, offset, "placed image")) { pvkDestroyImage(g_dev, (VkImage)out->img, NULL); memset(out, 0, sizeof *out); return -1; }
-    VKCK(pvkBindImageMemory(g_dev, out->img, (VkDeviceMemory)heap->mem, offset), "vkBindImageMemory(placed)");
+    VKCK(NVMTL_CENSUS_VK(pvkBindImageMemory(g_dev, out->img, (VkDeviceMemory)heap->mem, offset)), "vkBindImageMemory(placed)");
     out->mem = heap->mem; out->placed = 1; out->alloc = 0;
     VkComponentMapping swz = a8 ? (VkComponentMapping){ VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_R }
                                 : (VkComponentMapping){ 0, 0, 0, 0 };
@@ -7679,7 +7743,7 @@ int nvmtl_vk_depth_create_ex_placed(uint32_t w, uint32_t h, uint32_t vkfmt, uint
 {
     nvk_image pending = {0};
     int result = nvmtl_vk_depth_create_ex_placed_lifetime_body(w, h, vkfmt, aspect, heap, offset, &pending);
-    if (result) { nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
+    if (result) { nvmtl_client_census_request("image-create-failed"); nvmtl_failed_image(&pending); memset(out, 0, sizeof *out); }
     else { nvmtl_commit_image(&pending); *out = pending; }
     return result;
 }
@@ -7694,7 +7758,7 @@ static int nvmtl_vk_depth_create_ex_placed_lifetime_body(uint32_t w, uint32_t h,
     out->usage = (uint32_t)ici.usage;
     VkMemoryRequirements mr; pvkGetImageMemoryRequirements(g_dev, out->img, &mr);
     if (placed_ok(&mr, heap, offset, "placed depth image")) { pvkDestroyImage(g_dev, (VkImage)out->img, NULL); memset(out, 0, sizeof *out); return -1; }
-    VKCK(pvkBindImageMemory(g_dev, out->img, (VkDeviceMemory)heap->mem, offset), "vkBindImageMemory(placed depth)");
+    VKCK(NVMTL_CENSUS_VK(pvkBindImageMemory(g_dev, out->img, (VkDeviceMemory)heap->mem, offset)), "vkBindImageMemory(placed depth)");
     out->mem = heap->mem; out->placed = 1; out->alloc = 0;
     VkImageViewCreateInfo vci = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, NULL, 0, out->img, VK_IMAGE_VIEW_TYPE_2D,
         (VkFormat)vkfmt, { 0 }, { (VkImageAspectFlags)aspect, 0, 1, 0, 1 } };
@@ -7706,7 +7770,7 @@ int nvmtl_vk_buffer_size_align(size_t size, size_t *out_size, size_t *out_align)
     if (nvmtl_vk_init()) return -1;
     VkBufferCreateInfo bci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, size ? size : 1, NVMTL_BUFFER_USAGE, VK_SHARING_MODE_EXCLUSIVE, 0, NULL };
     VkBuffer b = VK_NULL_HANDLE;
-    VKCK(pvkCreateBuffer(g_dev, &bci, NULL, &b), "vkCreateBuffer(size query)");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateBuffer(g_dev, &bci, NULL, &b)), "vkCreateBuffer(size query)");
     VkMemoryRequirements mr; pvkGetBufferMemoryRequirements(g_dev, b, &mr); pvkDestroyBuffer(g_dev, b, NULL);
     *out_size = (size_t)mr.size; *out_align = (size_t)(mr.alignment ? mr.alignment : 256);
     return 0;
@@ -7881,7 +7945,7 @@ int nvmtl_vk_image_view_create_range_aspect(nvk_image *img, uint32_t vkfmt, int 
     if (vg < 0) return -1;
     if (vg > 0) vci.pNext = &uci;
     VkImageView v = VK_NULL_HANDLE;
-    VKCK(pvkCreateImageView(g_dev, &vci, NULL, &v), "vkCreateImageView(range)");
+    VKCK(NVMTL_CENSUS_VK(pvkCreateImageView(g_dev, &vci, NULL, &v)), "vkCreateImageView(range)");
     *out_view = v;
     return 0;
 }
