@@ -2,8 +2,8 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Metal coverage map</title>
 <style>
-:root{--bg:#0f1218;--fg:#e6e9ef;--mut:#8b93a3;--line:#0f1218;--missing:#6b7280;--slow:#dc2626;--improve:#eab308;--great:#22a559;--differs:#9333ea;--unrated:#4f78c4}
-@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#f6f7f9;--fg:#161a22;--mut:#5b6474;--line:#f6f7f9;--missing:#9aa1ad;--unrated:#7f9fdc}}
+:root{--bg:#0f1218;--panel:#1a1f2a;--fg:#e6e9ef;--mut:#8b93a3;--line:#0f1218;--missing:#6b7280;--slow:#dc2626;--improve:#eab308;--great:#22a559;--differs:#9333ea;--unrated:#4f78c4}
+@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#f6f7f9;--panel:#e3e6ec;--fg:#161a22;--mut:#5b6474;--line:#f6f7f9;--missing:#9aa1ad;--unrated:#7f9fdc}}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif}
 main{padding:16px;max-width:1400px;margin:0 auto}
 h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}
@@ -11,9 +11,9 @@ h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}
 .legend li{display:flex;align-items:center;gap:6px}
 .sw{width:14px;height:14px;border-radius:2px;display:inline-block}
 #map{position:relative;width:100%}
-.g{position:absolute}
-.g>.t{position:absolute;left:0;top:0;font-size:11px;font-weight:600;color:var(--fg);pointer-events:none;white-space:nowrap;overflow:hidden;max-width:calc(100% - 6px);z-index:2}
-.c{position:absolute;box-sizing:border-box;border:1px solid var(--bg)}
+.g{position:absolute;box-shadow:0 0 0 2px var(--bg) inset;background:var(--panel);pointer-events:none}.g>.c{pointer-events:auto}
+.g>.t{position:absolute;left:4px;top:2px;font-size:11px;font-weight:700;color:#fff;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none;white-space:nowrap;overflow:hidden;max-width:calc(100% - 6px);z-index:2}
+.c{position:absolute;box-sizing:border-box;border:1px solid var(--bg)}.g>.c:first-of-type{}
 .missing{background:var(--missing)}.slow{background:var(--slow)}.improve{background:var(--improve)}.great{background:var(--great)}.differs{background:var(--differs)}
 .unrated{background:var(--unrated)}
 #tip{position:fixed;display:none;background:#000d;color:#fff;padding:6px 8px;border-radius:4px;font-size:12px;max-width:420px;pointer-events:none;z-index:9;word-break:break-all}
@@ -29,26 +29,30 @@ const D=/*DATA*/;
 const NAMES={missing:"Not implemented",slow:"Implemented, very slow",improve:"Needs improvement, fine for now",great:"Works great",differs:"Implemented, differs from Apple's result",unrated:"Implemented, not yet rated"};
 document.getElementById("sub").textContent=D.total+" methods in "+D.groups.length+" protocols"+(D.device?" - "+D.device:"");
 document.getElementById("legend").innerHTML=Object.keys(NAMES).map(k=>`<li><span class="sw ${k}"></span>${NAMES[k]} (${D.totals[k]})</li>`).join("");
-// Every method is one equal square. A protocol is a block of squares in a grid; blocks are shelf-packed, largest first.
-const map=document.getElementById("map"),tip=document.getElementById("tip"),LABEL=16,GAP=8;
-function blockShape(n){const cols=Math.max(1,Math.ceil(Math.sqrt(n*1.6)));return{cols,rows:Math.ceil(n/cols)}}
-function pack(W,sq){const blocks=D.groups.map(g=>({g,...blockShape(g.cells.length)})).sort((a,b)=>b.rows-a.rows||b.cols-a.cols);
- let x=0,y=0,shelf=0;const out=[];
- for(const b of blocks){const w=b.cols*sq,h=b.rows*sq+LABEL;
-  if(x>0&&x+w>W){x=0;y+=shelf+GAP;shelf=0}
-  out.push({...b,x,y,w,h});x+=w+GAP;shelf=Math.max(shelf,h)}
- return{out,height:y+shelf}}
-function draw(){map.innerHTML="";const W=map.clientWidth,maxH=Math.max(innerHeight*0.8,420);
- let lo=4,hi=40;while(hi-lo>0.25){const m=(lo+hi)/2;pack(W,m).height<=maxH?lo=m:hi=m}
- const sq=Math.floor(lo*4)/4,res=pack(W,sq);map.style.height=res.height+"px";
- for(const b of res.out){const e=document.createElement("div");e.className="g";
-  Object.assign(e.style,{left:b.x+"px",top:b.y+"px",width:b.w+"px",height:b.h+"px"});
-  const t=document.createElement("div");t.className="t";t.textContent=b.g.p.replace(/^MTL/,"");e.appendChild(t);
-  b.g.cells.forEach((c,i)=>{const d=document.createElement("div");d.className="c "+c.st;
-   Object.assign(d.style,{left:(i%b.cols)*sq+"px",top:LABEL+Math.floor(i/b.cols)*sq+"px",width:sq+"px",height:sq+"px"});
+// Dense squarified treemap: one block per protocol, sized by its method count. Inside a block the methods are the
+// largest squares that hold them all, laid out row by row.
+const map=document.getElementById("map"),tip=document.getElementById("tip");
+function layout(items,x,y,w,h){const out=[];let rest=items.slice(),total=rest.reduce((a,b)=>a+b.v,0);
+ while(rest.length){const horiz=w>=h,side=horiz?h:w;let row=[],sum=0,best=Infinity;
+  for(let i=0;i<rest.length;i++){const r=rest.slice(0,i+1),sm=r.reduce((a,b)=>a+b.v,0),th=sm/total*(horiz?w:h);
+   const ar=Math.max(...r.map(it=>{const l=it.v/sm*side;return Math.max(th/l,l/th)}));if(ar<=best){best=ar;row=r;sum=sm}else break}
+  const th=sum/total*(horiz?w:h);let o=0;
+  for(const it of row){const l=it.v/sum*side;out.push(horiz?{it,x,y:y+o,w:th,h:l}:{it,x:x+o,y,w:l,h:th});o+=l}
+  rest=rest.slice(row.length);total-=sum;if(horiz){x+=th;w-=th}else{y+=th;h-=th}}
+ return out}
+function squares(n,w,h){let lo=1,hi=Math.min(w,h);for(let i=0;i<30;i++){const m=(lo+hi)/2;Math.floor(w/m)*Math.floor(h/m)>=n?lo=m:hi=m}
+ const sq=Math.max(1,Math.floor(lo*10)/10);return{sq,cols:Math.max(1,Math.floor(w/sq))}}
+function draw(){map.innerHTML="";const W=map.clientWidth,H=Math.round(W*0.5);map.style.height=H+"px";
+ const items=D.groups.map(g=>({g,v:g.cells.length})).sort((a,b)=>b.v-a.v);
+ for(const r of layout(items,0,0,W,H)){const g=r.it.g,e=document.createElement("div");e.className="g";
+  Object.assign(e.style,{left:r.x+"px",top:r.y+"px",width:r.w+"px",height:r.h+"px"});
+  const {sq,cols}=squares(g.cells.length,r.w-3,r.h-3);
+  g.cells.forEach((c,i)=>{const d=document.createElement("div");d.className="c "+c.st;
+   Object.assign(d.style,{left:1.5+(i%cols)*sq+"px",top:1.5+Math.floor(i/cols)*sq+"px",width:sq+"px",height:sq+"px"});
    d.onmousemove=ev=>{tip.style.display="block";tip.style.left=Math.min(ev.clientX+12,innerWidth-440)+"px";tip.style.top=ev.clientY+14+"px";
-    tip.textContent=b.g.p+" "+c.s+"\n"+NAMES[c.st]+(c.req?"":" (optional)")+(c.n?"\n"+c.n:"")+(c.e?"\nevidence: "+c.e:"");tip.style.whiteSpace="pre-wrap"};
+    tip.textContent=g.p+" "+c.s+"\n"+NAMES[c.st]+(c.req?"":" (optional)")+(c.n?"\n"+c.n:"")+(c.e?"\nevidence: "+c.e:"");tip.style.whiteSpace="pre-wrap"};
    d.onmouseleave=()=>tip.style.display="none";e.appendChild(d)});
+  if(r.w>60&&r.h>24){const t=document.createElement("div");t.className="t";t.textContent=g.p.replace(/^MTL/,"");e.appendChild(t)}
   map.appendChild(e)}}
 draw();addEventListener("resize",draw);
 </script></body></html>
