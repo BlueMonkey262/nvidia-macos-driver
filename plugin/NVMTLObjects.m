@@ -2674,8 +2674,57 @@ static NSDictionary *nvmtl_pixel_sampler_norm(NSDictionary *m) {
     static int off = -1; if (off < 0) off = getenv("NVMTL_NO_SAMPKEY") != NULL;
     if (off || !m.count) return m ?: @{};
     NSMutableDictionary *o = [NSMutableDictionary dictionaryWithCapacity:m.count];
-    for (NSString *k in m) { NSMutableDictionary *st = [m[k] mutableCopy]; st[@"lod_max_clamp"] = @65504.0f; o[k] = st; }
+    for (NSString *k in m) {
+        NSMutableDictionary *st = [m[k] mutableCopy];
+        /* Ordinary binds keep lod_max at AIR's half max so variant keys stay stable. Bind-time
+         * lodMinClamp/lodMaxClamp set _lod_override so the requested max reaches specialization. */
+        BOOL override = [st[@"_lod_override"] boolValue];
+        [st removeObjectForKey:@"_lod_override"];
+        if (!override) st[@"lod_max_clamp"] = @65504.0f;
+        else if (!([st[@"lod_max_clamp"] floatValue] < 65504.0f)) st[@"lod_max_clamp"] = @65504.0f;
+        o[k] = st;
+    }
     return o;
+}
+/* Metal's set*SamplerState:lodMinClamp:lodMaxClamp: replaces the sampler state's clamps for that
+ * binding. Cache VkSampler variants on the state (interned by create-info, including LOD). */
+enum { NVMTL_LOD_CLAMP_CACHE = 32 };
+static nvk_sampler *nvmtl_sampler_lod_clamp(NVMTLSamplerState *ns, float lo, float hi) {
+    if (!ns || !ns->_s.s) return NULL;
+    uint32_t lb, hb, lb0, hb0;
+    memcpy(&lb, &lo, 4); memcpy(&hb, &hi, 4);
+    memcpy(&lb0, &ns->_s.lod_min, 4); memcpy(&hb0, &ns->_s.lod_max, 4);
+    if (ns->_s.full_state && lb == lb0 && hb == hb0) return &ns->_s;
+    if (!ns->_s.full_state && lo <= 0.f && !(hi < 65504.f)) return &ns->_s;
+    NSString *key = [NSString stringWithFormat:@"%08x:%08x", lb, hb];
+    @synchronized (ns) {
+        if (!ns->_lodClampSamplers) ns->_lodClampSamplers = [NSMutableDictionary new];
+        NSValue *hit = ns->_lodClampSamplers[key];
+        if (hit) return (nvk_sampler *)hit.pointerValue;
+        while (ns->_lodClampSamplers.count >= NVMTL_LOD_CLAMP_CACHE) {
+            NSString *drop = ns->_lodClampSamplers.allKeys.firstObject;
+            if (!drop) break;
+            nvk_sampler *old = (nvk_sampler *)[ns->_lodClampSamplers[drop] pointerValue];
+            [ns->_lodClampSamplers removeObjectForKey:drop];
+            if (old) { nvmtl_vk_sampler_destroy(old); free(old); }
+        }
+        nvk_sampler *s = calloc(1, sizeof *s);
+        if (!s || nvmtl_vk_sampler_create_lod(&ns->_s, lo, hi, s)) {
+            free(s);
+            nvlog("sampler lod clamp variant FAILED - binding the sampler state's own clamps");
+            return &ns->_s;
+        }
+        ns->_lodClampSamplers[key] = [NSValue valueWithPointer:s];
+        return s;
+    }
+}
+static NSDictionary *nvmtl_pixel_state_lod(NVMTLSamplerState *ns, float lo, float hi) {
+    if (!ns || !ns->_pixelState) return nil;
+    NSMutableDictionary *st = [ns->_pixelState mutableCopy];
+    st[@"lod_min_clamp"] = @(lo);
+    st[@"lod_max_clamp"] = @(hi);
+    st[@"_lod_override"] = @YES;
+    return st;
 }
 static BOOL nvmtl_pixel_sampler_update(NSMutableDictionary *states, NSString *index, NSDictionary *state) {
     NSDictionary *old = states[index];
@@ -3425,22 +3474,28 @@ static void nvmtl_unbind_texture(NVMTLCommandBuffer *cb, uint32_t set, uint32_t 
     for (NSUInteger k = 0; k < r.length; k++) [self setFragmentSamplerState:ss[k] atIndex:r.location + k];
 }
 - (void)setFragmentSamplerState:(id<MTLSamplerState>)ss lodMinClamp:(float)lo lodMaxClamp:(float)hi atIndex:(NSUInteger)i {
-    [self setFragmentSamplerState:ss atIndex:i];
-    NSString *key=[@(i) stringValue];
-    if(_fragmentSamplers[key]) {
-        NSMutableDictionary *state=[_fragmentSamplers[key] mutableCopy];
-        state[@"lod_min_clamp"]=@(lo);state[@"lod_max_clamp"]=@(hi);
-        if (nvmtl_pixel_sampler_update(_fragmentSamplers,key,state)) _pixelSamplerKey=nil;
+    NVMTLSamplerState *ns = (NVMTLSamplerState *)ss;
+    nvk_sampler *samp = ns ? nvmtl_sampler_lod_clamp(ns, lo, hi) : NULL;
+    if (i >= 16 || nvmtl_vk_bind_sampler(&_cb->_c, NVMTL_SET_FRAGMENT, (uint32_t)i, samp)) {
+        nvlog("setFragmentSamplerState:lodMinClamp: invalid index or bind failure"); return;
     }
+    if (!_fragmentSamplers) _fragmentSamplers = [NSMutableDictionary new];
+    NSString *key = [@(i) stringValue];
+    if (nvmtl_pixel_sampler_update(_fragmentSamplers, key, nvmtl_pixel_state_lod(ns, lo, hi))) _pixelSamplerKey = nil;
+    nvtrace("FRAGMENT SAMPLER[%lu] lodClamp [%g,%g] bound=%d", (unsigned long)i, lo, hi, ns != nil);
+    if (ns) { if (!_cb->_resources) _cb->_resources = [NVMTLResSet new]; [_cb->_resources addObject:ns]; }
 }
 - (void)setVertexSamplerState:(id<MTLSamplerState>)ss lodMinClamp:(float)lo lodMaxClamp:(float)hi atIndex:(NSUInteger)i {
-    [self setVertexSamplerState:ss atIndex:i];
-    NSString *key=[@(i) stringValue];
-    if(_vertexSamplers[key]) {
-        NSMutableDictionary *state=[_vertexSamplers[key] mutableCopy];
-        state[@"lod_min_clamp"]=@(lo);state[@"lod_max_clamp"]=@(hi);
-        if (nvmtl_pixel_sampler_update(_vertexSamplers,key,state)) _pixelSamplerKey=nil;
+    NVMTLSamplerState *ns = (NVMTLSamplerState *)ss;
+    nvk_sampler *samp = ns ? nvmtl_sampler_lod_clamp(ns, lo, hi) : NULL;
+    if (i >= 16 || nvmtl_vk_bind_sampler(&_cb->_c, NVMTL_SET_VERTEX, (uint32_t)i, samp)) {
+        nvlog("setVertexSamplerState:lodMinClamp: invalid index or bind failure"); return;
     }
+    if (!_vertexSamplers) _vertexSamplers = [NSMutableDictionary new];
+    NSString *key = [@(i) stringValue];
+    if (nvmtl_pixel_sampler_update(_vertexSamplers, key, nvmtl_pixel_state_lod(ns, lo, hi))) _pixelSamplerKey = nil;
+    nvtrace("VERTEX SAMPLER[%lu] lodClamp [%g,%g] bound=%d", (unsigned long)i, lo, hi, ns != nil);
+    if (ns) { if (!_cb->_resources) _cb->_resources = [NVMTLResSet new]; [_cb->_resources addObject:ns]; }
 }
 - (void)setFragmentSamplerStates:(const id<MTLSamplerState> __unsafe_unretained [])ss lodMinClamps:(const float *)lo lodMaxClamps:(const float *)hi withRange:(NSRange)r {
     for(NSUInteger k=0;k<r.length;k++) [self setFragmentSamplerState:ss[k] lodMinClamp:lo[k] lodMaxClamp:hi[k] atIndex:r.location+k];
@@ -3912,7 +3967,15 @@ void nvmtl_heap_back(NVMTLHeap *h, NSUInteger size, int shared) {
     @synchronized (self) { if (!_resid) _resid = nvmtl_resid_for_sampler(self); }
     MTLResourceID rid; rid._impl = _resid; return rid;
 }
-- (void)dealloc { nvmtl_vk_sampler_destroy(&_s); }
+- (void)dealloc {
+    NSArray *variants;
+    @synchronized (self) { variants = _lodClampSamplers.allValues; _lodClampSamplers = nil; }
+    for (NSValue *v in variants) {
+        nvk_sampler *s = (nvk_sampler *)v.pointerValue;
+        if (s) { nvmtl_vk_sampler_destroy(s); free(s); }
+    }
+    nvmtl_vk_sampler_destroy(&_s);
+}
 - (NSString *)label { return _label; }
 - (id<MTLDevice>)device { return (id<MTLDevice>)gNVMTLMainDevice; }
 @end
@@ -4582,7 +4645,21 @@ static void nvmtl_zprobe_drain(void) {
     if (nvmtl_vk_bind_sampler(&_cb->_c, NVMTL_SET_VERTEX, (uint32_t)i, ns ? &ns->_s : NULL)) nvlog("compute setSamplerState: bind FAILED");
 }
 - (void)setSamplerState:(id<MTLSamplerState>)ss lodMinClamp:(float)lo lodMaxClamp:(float)hi atIndex:(NSUInteger)i {
-    [self setSamplerState:ss atIndex:i];
+    NVMTLSamplerState *ns = (NVMTLSamplerState *)ss;
+    if (nvmtl_sass_tables_wanted()) {
+        if (!_sassSamplers) _sassSamplers = [NSMutableDictionary new];
+        if (ns) _sassSamplers[@(i)] = ns; else [_sassSamplers removeObjectForKey:@(i)];
+    }
+    if (!_samplers) _samplers = [NSMutableDictionary new];
+    NSString *key = [NSString stringWithFormat:@"%lu", (unsigned long)i];
+    id was = _samplers[key], now = nvmtl_pixel_state_lod(ns, lo, hi);
+    if (now) _samplers[key] = now;
+    else [_samplers removeObjectForKey:key];
+    if (was != now && ![was isEqual:now]) { _e78Key = nil; _e78VarSel = nil; }
+    nvmtl_retain_resource(_cb, ns);
+    nvk_sampler *samp = ns ? nvmtl_sampler_lod_clamp(ns, lo, hi) : NULL;
+    if (nvmtl_vk_bind_sampler(&_cb->_c, NVMTL_SET_VERTEX, (uint32_t)i, samp))
+        nvlog("compute setSamplerState:lodMinClamp: bind FAILED");
 }
 - (void)setBuffers:(const id<MTLBuffer> __unsafe_unretained [])b offsets:(const NSUInteger *)offs withRange:(NSRange)r {
     for (NSUInteger k = 0; k < r.length; k++) [self setBuffer:b[k] offset:offs ? offs[k] : 0 atIndex:r.location + k];

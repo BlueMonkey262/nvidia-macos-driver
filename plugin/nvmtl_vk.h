@@ -177,6 +177,8 @@ int  nvmtl_vk_bind_buffer_offset(nvk_cmdbuf *c, uint32_t set, uint32_t index, si
 int  nvmtl_vk_bind_texture(nvk_cmdbuf *c, uint32_t set, uint32_t index, nvk_image *img);
 int  nvmtl_vk_sampler_create(int linear, int repeat, nvk_sampler *out);
 int  nvmtl_vk_sampler_create_desc(const nvmtl_sampler_desc *desc, nvk_sampler *out);
+/* Same filter/address state as base, with lod_min/lod_max replacing base's clamps (Metal bind-time overrides). */
+int  nvmtl_vk_sampler_create_lod(const nvk_sampler *base, float lod_min, float lod_max, nvk_sampler *out);
 void nvmtl_vk_sampler_destroy(nvk_sampler *s);
 int  nvmtl_vk_bind_sampler(nvk_cmdbuf *c, uint32_t set, uint32_t index, nvk_sampler *s);
 void nvmtl_vk_cmd_bind_set(nvk_cmdbuf *c, nvk_pipeline *p);

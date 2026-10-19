@@ -4223,6 +4223,33 @@ int nvmtl_vk_sampler_create_desc(const nvmtl_sampler_desc *desc, nvk_sampler *ou
     return 0;
 }
 
+int nvmtl_vk_sampler_create_lod(const nvk_sampler *base, float lod_min, float lod_max, nvk_sampler *out)
+{
+    if (!base || !base->s || !out) return -1;
+    if (base->full_state) {
+        nvmtl_sampler_desc d = base->desc;
+        d.lod_min = lod_min;
+        d.lod_max = lod_max;
+        return nvmtl_vk_sampler_create_desc(&d, out);
+    }
+    /* Simple create path (pixel / contract-off): rebuild with the requested clamps. */
+    memset(out, 0, sizeof *out);
+    if (nvmtl_vk_init()) return -1;
+    VkSamplerAddressMode am = base->repeat ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    VkSamplerCreateInfo sci = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+    sci.magFilter = sci.minFilter = base->linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    sci.mipmapMode = base->linear ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sci.addressModeU = sci.addressModeV = sci.addressModeW = am;
+    sci.minLod = lod_min < 0.f ? 0.f : lod_min;
+    sci.maxLod = lod_max < sci.minLod ? sci.minLod : lod_max;
+    VkSampler handle = VK_NULL_HANDLE;
+    VKCK(nvmtl_sampler_acquire(&sci, &handle), "sampler lod variant acquire");
+    out->s = (void *)handle;
+    out->linear = base->linear; out->repeat = base->repeat;
+    out->lod_min = sci.minLod; out->lod_max = sci.maxLod;
+    return 0;
+}
+
 void nvmtl_vk_sampler_destroy(nvk_sampler *s)
 {
     if (!s || !s->s) return;
