@@ -809,7 +809,7 @@
   },
   "commandBuffer": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5122-5144 (model-reviewed, not tested)",
-   "note": "Allocates NVMTLCommandBuffer, resources set, and begins a Vulkan command buffer.",
+   "note": "Allocates NVMTLCommandBuffer, resources set, and begins a Vulkan command buffer. [confirmed by a second review]",
    "status": "great"
   },
   "commandBufferWithDescriptor:": {
@@ -824,7 +824,7 @@
   },
   "device": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5151 (model-reviewed, not tested)",
-   "note": "Returns the queue's stored _dev.",
+   "note": "Returns the queue's stored _dev. [confirmed by a second review]",
    "status": "great"
   },
   "insertDebugCaptureBoundary": {
@@ -834,7 +834,7 @@
   },
   "label": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5150 (model-reviewed, not tested)",
-   "note": "Returns the stored queue label.",
+   "note": "Returns the stored queue label. [confirmed by a second review]",
    "status": "great"
   },
   "removeResidencySet:": {
@@ -849,7 +849,7 @@
   },
   "setLabel:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5149 (model-reviewed, not tested)",
-   "note": "Copies and stores the queue label.",
+   "note": "Copies and stores the queue label. [confirmed by a second review]",
    "status": "great"
   }
  },
@@ -1728,17 +1728,17 @@
  "MTLEvent": {
   "device": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5176, :5184 (model-reviewed, not tested)",
-   "note": "NVMTLEvent and NVMTLSharedEvent both return their stored _dev.",
+   "note": "NVMTLEvent and NVMTLSharedEvent both return their stored _dev. [confirmed by a second review]",
    "status": "great"
   },
   "label": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5177, :5185 (model-reviewed, not tested)",
-   "note": "Both event classes return the stored _label.",
+   "note": "Both event classes return the stored _label. [confirmed by a second review]",
    "status": "great"
   },
   "setLabel:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5178, :5186 (model-reviewed, not tested)",
-   "note": "Both event classes copy and store the label.",
+   "note": "Both event classes copy and store the label. [confirmed by a second review]",
    "status": "great"
   }
  },
@@ -2107,17 +2107,17 @@
   },
   "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:baseVertex:baseInstance:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3947-3952, :3310-3312 (model-reviewed, not tested)",
-   "note": "Stores indexed draw parameters and arms the command for later replay.",
+   "note": "Stores indexed draw parameters and arms the command for later replay. [confirmed by a second review]",
    "status": "great"
   },
   "drawPrimitives:vertexStart:vertexCount:instanceCount:baseInstance:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3943-3946, :3313-3315 (model-reviewed, not tested)",
-   "note": "Stores non-indexed draw parameters and arms the command for replay.",
+   "note": "Stores non-indexed draw parameters and arms the command for replay. [confirmed by a second review]",
    "status": "great"
   },
   "reset": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3988-3992 (model-reviewed, not tested)",
-   "note": "Clears pipeline, buffers, draw arming, and recorded raster/depth state flags.",
+   "note": "Clears pipeline, buffers, draw arming, and recorded raster/depth state flags. [confirmed by a second review]",
    "status": "great"
   },
   "setBarrier": {
@@ -2132,7 +2132,7 @@
   },
   "setRenderPipelineState:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3930, :3299 (model-reviewed, not tested)",
-   "note": "Stores the render pipeline for replay via setRenderPipelineState.",
+   "note": "Stores the render pipeline for replay via setRenderPipelineState. [confirmed by a second review]",
    "status": "great"
   },
   "setVertexBuffer:offset:atIndex:": {
@@ -2233,12 +2233,12 @@
  "MTLParallelRenderCommandEncoder": {
   "device": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5452 (model-reviewed, not tested)",
-   "note": "Returns gNVMTLMainDevice.",
+   "note": "Returns gNVMTLMainDevice. [confirmed by a second review]",
    "status": "great"
   },
   "endEncoding": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5376-5450 (model-reviewed, not tested)",
-   "note": "Creates one real encoder and serially replays deferred sub-encoder commands into it.",
+   "note": "Creates one real encoder and serially replays deferred sub-encoder commands into it. [confirmed by a second review]",
    "status": "great"
   },
   "insertDebugSignpost:": {
@@ -2248,7 +2248,7 @@
   },
   "label": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5453 (model-reviewed, not tested)",
-   "note": "Returns the stored parallel-encoder label.",
+   "note": "Returns the stored parallel-encoder label. [confirmed by a second review]",
    "status": "great"
   },
   "popDebugGroup": {
@@ -2263,37 +2263,37 @@
   },
   "renderCommandEncoder": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5370-5374 (model-reviewed, not tested)",
-   "note": "Allocates a deferred sub-encoder proxy and registers it under the lock.",
+   "note": "Allocates a deferred sub-encoder proxy and registers it under the lock. [confirmed by a second review]",
    "status": "great"
   },
   "setColorStoreAction:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5455 (model-reviewed, not tested)",
-   "note": "Writes storeAction onto the parallel encoder's color attachment descriptor.",
+   "note": "Writes storeAction onto the parallel encoder's color attachment descriptor. [confirmed by a second review]",
    "status": "great"
   },
   "setColorStoreActionOptions:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5458 (model-reviewed, not tested)",
-   "note": "Writes storeActionOptions onto the color attachment descriptor.",
+   "note": "Writes storeActionOptions onto the color attachment descriptor. [confirmed by a second review]",
    "status": "great"
   },
   "setDepthStoreAction:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5456 (model-reviewed, not tested)",
-   "note": "Writes storeAction onto the depth attachment descriptor.",
+   "note": "Writes storeAction onto the depth attachment descriptor. [confirmed by a second review]",
    "status": "great"
   },
   "setDepthStoreActionOptions:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5459 (model-reviewed, not tested)",
-   "note": "Writes storeActionOptions onto the depth attachment descriptor.",
+   "note": "Writes storeActionOptions onto the depth attachment descriptor. [confirmed by a second review]",
    "status": "great"
   },
   "setLabel:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5454 (model-reviewed, not tested)",
-   "note": "Copies and stores the parallel-encoder label.",
+   "note": "Copies and stores the parallel-encoder label. [confirmed by a second review]",
    "status": "great"
   },
   "setStencilStoreAction:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5457 (model-reviewed, not tested)",
-   "note": "Writes storeAction onto the stencil attachment descriptor.",
+   "note": "Writes storeAction onto the stencil attachment descriptor. [confirmed by a second review]",
    "status": "great"
   },
   "setStencilStoreActionOptions:": {
@@ -2305,7 +2305,7 @@
  "MTLRenderCommandEncoder": {
   "device": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3517 (model-reviewed, not tested)",
-   "note": "Returns command-buffer device, else gNVMTLMainDevice.",
+   "note": "Returns command-buffer device, else gNVMTLMainDevice. [confirmed by a second review]",
    "status": "great"
   },
   "dispatchThreadsPerTile:": {
@@ -2315,32 +2315,32 @@
   },
   "drawIndexedPatches:patchIndexBuffer:patchIndexBufferOffset:controlPointIndexBuffer:controlPointIndexBufferOffset:indirectBuffer:indirectBufferOffset:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3166-3171 (model-reviewed, not tested)",
-   "note": "Indirect indexed patches via nvmtlPatches.",
+   "note": "Indirect indexed patches via nvmtlPatches. [confirmed by a second review]",
    "status": "great"
   },
   "drawIndexedPatches:patchStart:patchCount:patchIndexBuffer:patchIndexBufferOffset:controlPointIndexBuffer:controlPointIndexBufferOffset:instanceCount:baseInstance:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3161-3165 (model-reviewed, not tested)",
-   "note": "Indexed tessellation patches via nvmtlPatches.",
+   "note": "Indexed tessellation patches via nvmtlPatches. [confirmed by a second review]",
    "status": "great"
   },
   "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3355-3358 (model-reviewed, not tested)",
-   "note": "Forwards to full indexed draw with defaults.",
+   "note": "Forwards to full indexed draw with defaults. [confirmed by a second review]",
    "status": "great"
   },
   "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3350-3353 (model-reviewed, not tested)",
-   "note": "Forwards to indexed draw with baseVertex 0.",
+   "note": "Forwards to indexed draw with baseVertex 0. [confirmed by a second review]",
    "status": "great"
   },
   "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:baseVertex:baseInstance:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3334-3348 (model-reviewed, not tested)",
-   "note": "Indexed draw via nvmtl_vk_cmd_draw_indexed.",
+   "note": "Indexed draw via nvmtl_vk_cmd_draw_indexed. [confirmed by a second review]",
    "status": "great"
   },
   "drawIndexedPrimitives:indexType:indexBuffer:indexBufferOffset:indirectBuffer:indirectBufferOffset:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3465-3478 (model-reviewed, not tested)",
-   "note": "Indexed indirect draw after pipeline and topology bind.",
+   "note": "Indexed indirect draw after pipeline and topology bind. [confirmed by a second review]",
    "status": "great"
   },
   "drawMeshThreadgroups:threadsPerObjectThreadgroup:threadsPerMeshThreadgroup:": {
@@ -2360,37 +2360,37 @@
   },
   "drawPatches:patchIndexBuffer:patchIndexBufferOffset:indirectBuffer:indirectBufferOffset:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3156-3160 (model-reviewed, not tested)",
-   "note": "Indirect tessellation patches via nvmtlPatches.",
+   "note": "Indirect tessellation patches via nvmtlPatches. [confirmed by a second review]",
    "status": "great"
   },
   "drawPatches:patchStart:patchCount:patchIndexBuffer:patchIndexBufferOffset:instanceCount:baseInstance:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3152-3155 (model-reviewed, not tested)",
-   "note": "Direct tessellation patches via nvmtlPatches.",
+   "note": "Direct tessellation patches via nvmtlPatches. [confirmed by a second review]",
    "status": "great"
   },
   "drawPrimitives:indirectBuffer:indirectBufferOffset:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3453-3464 (model-reviewed, not tested)",
-   "note": "Indirect draw after pipeline bind and topology setup.",
+   "note": "Indirect draw after pipeline bind and topology setup. [confirmed by a second review]",
    "status": "great"
   },
   "drawPrimitives:vertexStart:vertexCount:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3104-3106 (model-reviewed, not tested)",
-   "note": "Forwards to instanced draw with instanceCount 1.",
+   "note": "Forwards to instanced draw with instanceCount 1. [confirmed by a second review]",
    "status": "great"
   },
   "drawPrimitives:vertexStart:vertexCount:instanceCount:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3101-3103 (model-reviewed, not tested)",
-   "note": "Forwards to full draw with baseInstance 0.",
+   "note": "Forwards to full draw with baseInstance 0. [confirmed by a second review]",
    "status": "great"
   },
   "drawPrimitives:vertexStart:vertexCount:instanceCount:baseInstance:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3081-3091 (model-reviewed, not tested)",
-   "note": "Binds sampler pipeline, topology, vertex inputs, then draws.",
+   "note": "Binds sampler pipeline, topology, vertex inputs, then draws. [confirmed by a second review]",
    "status": "great"
   },
   "endEncoding": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3209-3269 (model-reviewed, not tested)",
-   "note": "Ends render, copies/sums visibility results, handles empty passes.",
+   "note": "Ends render, copies/sums visibility results, handles empty passes. [confirmed by a second review]",
    "status": "great"
   },
   "executeCommandsInBuffer:withRange:": {
@@ -2405,7 +2405,7 @@
   },
   "label": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3516 (model-reviewed, not tested)",
-   "note": "Returns stored encoder label.",
+   "note": "Returns stored encoder label. [confirmed by a second review]",
    "status": "great"
   },
   "memoryBarrierWithResources:count:afterStages:beforeStages:": {
@@ -2430,13 +2430,13 @@
   },
   "sampleCountersInBuffer:atSampleIndex:withBarrier:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3447,2603-2620 (model-reviewed, not tested)",
-   "note": "Writes timestamp into device sample buffer via helper.",
+   "note": "Writes timestamp into device sample buffer via helper. [confirmed by a second review]",
    "status": "great"
   },
   "setBlendColorRed:green:blue:alpha:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3364-3366 (model-reviewed, not tested)",
-   "note": "Forwards RGBA to Vulkan blend constants.",
-   "status": "great"
+   "evidence": "read from source: plugin/NVMTLObjects.m:3364-3366,2944-2946 (model-reviewed, not tested)",
+   "note": "Issues VK immediately; not cached/reapplied on first begin unlike viewport/cull. [second review]",
+   "status": "improve"
   },
   "setColorStoreAction:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3518-3524 (model-reviewed, not tested)",
@@ -2450,13 +2450,13 @@
   },
   "setCullMode:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3284-3287 (model-reviewed, not tested)",
-   "note": "Updates cull bits and applies when pass has begun.",
+   "note": "Updates cull bits and applies when pass has begun. [confirmed by a second review]",
    "status": "great"
   },
   "setDepthBias:slopeScale:clamp:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3363 (model-reviewed, not tested)",
-   "note": "Calls nvmtl_vk_cmd_set_depth_bias with all three args.",
-   "status": "great"
+   "evidence": "read from source: plugin/NVMTLObjects.m:3363,3271-3274,2944-2946 (model-reviewed, not tested)",
+   "note": "Issues VK immediately; not cached/reapplied when pass begins unlike viewport/cull. [second review]",
+   "status": "improve"
   },
   "setDepthClipMode:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3320-3323 (model-reviewed, not tested)",
@@ -2465,7 +2465,7 @@
   },
   "setDepthStencilState:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3330-3333 (model-reviewed, not tested)",
-   "note": "Stores state and applies depth/stencil dynamic state.",
+   "note": "Stores state and applies depth/stencil dynamic state. [confirmed by a second review]",
    "status": "great"
   },
   "setDepthStoreAction:": {
@@ -2490,7 +2490,7 @@
   },
   "setFragmentBufferOffset:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3391-3396 (model-reviewed, not tested)",
-   "note": "Updates cached offset and rebinds fragment buffer slot.",
+   "note": "Updates cached offset and rebinds fragment buffer slot. [confirmed by a second review]",
    "status": "great"
   },
   "setFragmentBuffers:offsets:withRange:": {
@@ -2500,7 +2500,7 @@
   },
   "setFragmentBytes:length:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3025 (model-reviewed, not tested)",
-   "note": "Uploads via nvmtlBindBytes into fragment set.",
+   "note": "Uploads via nvmtlBindBytes into fragment set. [confirmed by a second review]",
    "status": "great"
   },
   "setFragmentIntersectionFunctionTable:atBufferIndex:": {
@@ -2515,7 +2515,7 @@
   },
   "setFragmentSamplerState:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3037-3047 (model-reviewed, not tested)",
-   "note": "Binds sampler or clears with NULL; tracks pixel-sampler state.",
+   "note": "Binds sampler or clears with NULL; tracks pixel-sampler state. [confirmed by a second review]",
    "status": "great"
   },
   "setFragmentSamplerState:lodMinClamp:lodMaxClamp:atIndex:": {
@@ -2530,7 +2530,7 @@
   },
   "setFragmentSamplerStates:withRange:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3412-3414 (model-reviewed, not tested)",
-   "note": "Iterates range calling per-index sampler setter.",
+   "note": "Iterates range calling per-index sampler setter. [confirmed by a second review]",
    "status": "great"
   },
   "setFragmentTexture:atIndex:": {
@@ -2555,12 +2555,12 @@
   },
   "setFrontFacingWinding:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3288-3291 (model-reviewed, not tested)",
-   "note": "Encodes winding into cull state and applies when begun.",
+   "note": "Encodes winding into cull state and applies when begun. [confirmed by a second review]",
    "status": "great"
   },
   "setLabel:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3515 (model-reviewed, not tested)",
-   "note": "Copies label into encoder ivar.",
+   "note": "Copies label into encoder ivar. [confirmed by a second review]",
    "status": "great"
   },
   "setMeshBuffer:offset:atIndex:": {
@@ -2570,7 +2570,7 @@
   },
   "setMeshBufferOffset:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2680,2695 (model-reviewed, not tested)",
-   "note": "Updates mesh note and forwards offset to setVertexBufferOffset:.",
+   "note": "Updates mesh note and forwards offset to setVertexBufferOffset:. [confirmed by a second review]",
    "status": "great"
   },
   "setMeshBuffers:offsets:withRange:": {
@@ -2580,12 +2580,12 @@
   },
   "setMeshBytes:length:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2683-2684,2695 (model-reviewed, not tested)",
-   "note": "Notes bytes and forwards to setVertexBytes:length:atIndex:.",
+   "note": "Notes bytes and forwards to setVertexBytes:length:atIndex:. [confirmed by a second review]",
    "status": "great"
   },
   "setMeshSamplerState:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2688,2695 (model-reviewed, not tested)",
-   "note": "Notes sampler and forwards to setVertexSamplerState:atIndex:.",
+   "note": "Notes sampler and forwards to setVertexSamplerState:atIndex:. [confirmed by a second review]",
    "status": "great"
   },
   "setMeshSamplerState:lodMinClamp:lodMaxClamp:atIndex:": {
@@ -2600,7 +2600,7 @@
   },
   "setMeshSamplerStates:withRange:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2691-2692,2695 (model-reviewed, not tested)",
-   "note": "Range loop into setMeshSamplerState:atIndex:.",
+   "note": "Range loop into setMeshSamplerState:atIndex:. [confirmed by a second review]",
    "status": "great"
   },
   "setMeshTexture:atIndex:": {
@@ -2615,27 +2615,27 @@
   },
   "setObjectBuffer:offset:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2679,2696 (model-reviewed, not tested)",
-   "note": "Records object-stage binds; mesh draw replays them onto the compute path.",
+   "note": "Records object-stage binds; mesh draw replays them onto the compute path. [confirmed by a second review]",
    "status": "great"
   },
   "setObjectBufferOffset:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2680,2696 (model-reviewed, not tested)",
-   "note": "Records object-stage binds; mesh draw replays them onto the compute path.",
+   "note": "Records object-stage binds; mesh draw replays them onto the compute path. [confirmed by a second review]",
    "status": "great"
   },
   "setObjectBuffers:offsets:withRange:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2681-2682,2696 (model-reviewed, not tested)",
-   "note": "Records object-stage binds; mesh draw replays them onto the compute path.",
+   "note": "Records object-stage binds; mesh draw replays them onto the compute path. [confirmed by a second review]",
    "status": "great"
   },
   "setObjectBytes:length:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2683-2684,2696 (model-reviewed, not tested)",
-   "note": "Records object-stage binds; mesh draw replays them onto the compute path.",
+   "note": "Records object-stage binds; mesh draw replays them onto the compute path. [confirmed by a second review]",
    "status": "great"
   },
   "setObjectSamplerState:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2688,2696 (model-reviewed, not tested)",
-   "note": "Records object-stage binds; mesh draw replays them onto the compute path.",
+   "note": "Records object-stage binds; mesh draw replays them onto the compute path. [confirmed by a second review]",
    "status": "great"
   },
   "setObjectSamplerState:lodMinClamp:lodMaxClamp:atIndex:": {
@@ -2650,17 +2650,17 @@
   },
   "setObjectSamplerStates:withRange:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2691-2692,2696 (model-reviewed, not tested)",
-   "note": "Records object-stage binds; mesh draw replays them onto the compute path.",
+   "note": "Records object-stage binds; mesh draw replays them onto the compute path. [confirmed by a second review]",
    "status": "great"
   },
   "setObjectTexture:atIndex:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2685,2696 (model-reviewed, not tested)",
-   "note": "Records object-stage binds; mesh draw replays them onto the compute path.",
+   "note": "Records object-stage binds; mesh draw replays them onto the compute path. [confirmed by a second review]",
    "status": "great"
   },
   "setObjectTextures:withRange:": {
    "evidence": "read from source: plugin/NVMTLLibraryLoad.m:2686-2687,2696 (model-reviewed, not tested)",
-   "note": "Records object-stage binds; mesh draw replays them onto the compute path.",
+   "note": "Records object-stage binds; mesh draw replays them onto the compute path. [confirmed by a second review]",
    "status": "great"
   },
   "setObjectThreadgroupMemoryLength:atIndex:": {
@@ -2670,12 +2670,12 @@
   },
   "setRenderPipelineState:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:2900-2979 (model-reviewed, not tested)",
-   "note": "Begins pass on first bind; rebinds compatible pipelines mid-pass.",
+   "note": "Begins pass on first bind; rebinds compatible pipelines mid-pass. [confirmed by a second review]",
    "status": "great"
   },
   "setScissorRect:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3278-3283 (model-reviewed, not tested)",
-   "note": "Caches rect and sets Vulkan scissor when pass begun.",
+   "note": "Caches rect and sets Vulkan scissor when pass begun. [confirmed by a second review]",
    "status": "great"
   },
   "setScissorRects:count:": {
@@ -2684,14 +2684,14 @@
    "status": "improve"
   },
   "setStencilFrontReferenceValue:backReferenceValue:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3362 (model-reviewed, not tested)",
-   "note": "Sets separate front and back stencil references.",
-   "status": "great"
+   "evidence": "read from source: plugin/NVMTLObjects.m:3362,2892-2898 (model-reviewed, not tested)",
+   "note": "Issues VK immediately; not cached/reapplied on begin; early calls may miss pass. [second review]",
+   "status": "improve"
   },
   "setStencilReferenceValue:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3361 (model-reviewed, not tested)",
-   "note": "Sets both stencil references to the same value.",
-   "status": "great"
+   "evidence": "read from source: plugin/NVMTLObjects.m:3361,2892-2898 (model-reviewed, not tested)",
+   "note": "Issues VK immediately; not cached/reapplied on begin; early calls may miss pass. [second review]",
+   "status": "improve"
   },
   "setStencilStoreAction:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3531-3533 (model-reviewed, not tested)",
@@ -2705,12 +2705,12 @@
   },
   "setTessellationFactorBuffer:offset:instanceStride:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3107-3112 (model-reviewed, not tested)",
-   "note": "Stores factor buffer, offset, and instance stride for draws.",
+   "note": "Stores factor buffer, offset, and instance stride for draws. [confirmed by a second review]",
    "status": "great"
   },
   "setTessellationFactorScale:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3113 (model-reviewed, not tested)",
-   "note": "Records tessellation factor scale and set flag.",
+   "note": "Records tessellation factor scale and set flag. [confirmed by a second review]",
    "status": "great"
   },
   "setThreadgroupMemoryLength:offset:atIndex:": {
@@ -2785,12 +2785,12 @@
   },
   "setVertexBufferOffset:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3367-3372 (model-reviewed, not tested)",
-   "note": "Updates cached offset and rebinds vertex buffer slot.",
+   "note": "Updates cached offset and rebinds vertex buffer slot. [confirmed by a second review]",
    "status": "great"
   },
   "setVertexBufferOffset:attributeStride:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3383-3384 (model-reviewed, not tested)",
-   "note": "Updates offset and records dynamic attribute stride.",
+   "note": "Updates offset and records dynamic attribute stride. [confirmed by a second review]",
    "status": "great"
   },
   "setVertexBuffers:offsets:attributeStrides:withRange:": {
@@ -2805,12 +2805,12 @@
   },
   "setVertexBytes:length:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3024 (model-reviewed, not tested)",
-   "note": "Uploads via ring/scratch and binds vertex set.",
+   "note": "Uploads via ring/scratch and binds vertex set. [confirmed by a second review]",
    "status": "great"
   },
   "setVertexBytes:length:attributeStride:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3389-3390 (model-reviewed, not tested)",
-   "note": "Bytes bind plus dynamic stride via nvmtlVertexStride.",
+   "note": "Bytes bind plus dynamic stride via nvmtlVertexStride. [confirmed by a second review]",
    "status": "great"
   },
   "setVertexIntersectionFunctionTable:atBufferIndex:": {
@@ -2825,7 +2825,7 @@
   },
   "setVertexSamplerState:atIndex:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3048-3058 (model-reviewed, not tested)",
-   "note": "Binds sampler or clears with NULL; tracks pixel-sampler state.",
+   "note": "Binds sampler or clears with NULL; tracks pixel-sampler state. [confirmed by a second review]",
    "status": "great"
   },
   "setVertexSamplerState:lodMinClamp:lodMaxClamp:atIndex:": {
@@ -2840,7 +2840,7 @@
   },
   "setVertexSamplerStates:withRange:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3409-3411 (model-reviewed, not tested)",
-   "note": "Iterates range calling per-index sampler setter.",
+   "note": "Iterates range calling per-index sampler setter. [confirmed by a second review]",
    "status": "great"
   },
   "setVertexTexture:atIndex:": {
@@ -2865,7 +2865,7 @@
   },
   "setViewport:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3271-3275 (model-reviewed, not tested)",
-   "note": "Caches viewport and sets Vulkan viewport when begun.",
+   "note": "Caches viewport and sets Vulkan viewport when begun. [confirmed by a second review]",
    "status": "great"
   },
   "setViewports:count:": {
@@ -2879,9 +2879,9 @@
    "status": "improve"
   },
   "textureBarrier": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:3448 (model-reviewed, not tested)",
-   "note": "Inserts full memory barrier; matches Metal textureBarrier sync intent.",
-   "status": "great"
+   "evidence": "read from source: plugin/NVMTLObjects.m:3448; plugin/nvmtl_vk.c:6495-6500 (model-reviewed, not tested)",
+   "note": "Every call emits VkCmdPipelineBarrier ALL_COMMANDS\u2192ALL_COMMANDS full memory barrier. [second review]",
+   "status": "slow"
   },
   "tileHeight": {
    "evidence": "read from source: plugin/NVMTLObjects.m:2629 (model-reviewed, not tested)",
@@ -3178,17 +3178,17 @@
  "MTLSamplerState": {
   "device": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3905 (model-reviewed, not tested)",
-   "note": "Returns gNVMTLMainDevice.",
+   "note": "Returns gNVMTLMainDevice. [confirmed by a second review]",
    "status": "great"
   },
   "gpuResourceID": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3899-3902 (model-reviewed, not tested)",
-   "note": "Lazily assigns nvmtl_resid_for_sampler and returns it as MTLResourceID.",
+   "note": "Lazily assigns nvmtl_resid_for_sampler and returns it as MTLResourceID. [confirmed by a second review]",
    "status": "great"
   },
   "label": {
    "evidence": "read from source: plugin/NVMTLObjects.m:3904 (model-reviewed, not tested)",
-   "note": "Returns the stored sampler _label.",
+   "note": "Returns the stored sampler _label. [confirmed by a second review]",
    "status": "great"
   }
  },
@@ -3202,7 +3202,7 @@
  "MTLTexture": {
   "allocatedSize": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1108-1111 (model-reviewed, not tested)",
-   "note": "Returns nvk_image alloc when set; else sums mip/layer footprint from image metadata.",
+   "note": "Returns nvk_image alloc when set; else sums mip/layer footprint from image metadata. [confirmed by a second review]",
    "status": "great"
   },
   "allowGPUOptimizedContents": {
@@ -3212,42 +3212,42 @@
   },
   "arrayLength": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1313 (model-reviewed, not tested)",
-   "note": "Derives length from layers/viewSlices and textureType (cube, array, cube-array).",
+   "note": "Derives length from layers/viewSlices and textureType (cube, array, cube-array). [confirmed by a second review]",
    "status": "great"
   },
   "buffer": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1338 (model-reviewed, not tested)",
-   "note": "Returns backing buffer for texture-from-buffer; walks parent otherwise.",
+   "note": "Returns backing buffer for texture-from-buffer; walks parent otherwise. [confirmed by a second review]",
    "status": "great"
   },
   "bufferBytesPerRow": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1340 (model-reviewed, not tested)",
-   "note": "Returns stored bytes-per-row for buffer-backed textures; parents consulted.",
+   "note": "Returns stored bytes-per-row for buffer-backed textures; parents consulted. [confirmed by a second review]",
    "status": "great"
   },
   "bufferOffset": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1339 (model-reviewed, not tested)",
-   "note": "Returns stored buffer offset for buffer-backed textures; parents consulted.",
+   "note": "Returns stored buffer offset for buffer-backed textures; parents consulted. [confirmed by a second review]",
    "status": "great"
   },
   "compressionType": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1346; NVMTLDevice.m:756-799 (model-reviewed, not tested)",
-   "note": "Always Lossless; create never builds lossy textures, so the report matches allocations.",
+   "note": "Always Lossless; create never builds lossy textures, so the report matches allocations. [confirmed by a second review]",
    "status": "great"
   },
   "cpuCacheMode": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1323; NVMTLObjects.h:309 (model-reviewed, not tested)",
-   "note": "Reads cache mode from heap or resource options via nvmtl_res_cache.",
+   "note": "Reads cache mode from heap or resource options via nvmtl_res_cache. [confirmed by a second review]",
    "status": "great"
   },
   "depth": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1306 (model-reviewed, not tested)",
-   "note": "3D uses layers shifted by baseLevel; other types return 1.",
+   "note": "3D uses layers shifted by baseLevel; other types return 1. [confirmed by a second review]",
    "status": "great"
   },
   "device": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1322 (model-reviewed, not tested)",
-   "note": "Returns gNVMTLMainDevice for the texture.",
+   "note": "Returns gNVMTLMainDevice for the texture. [confirmed by a second review]",
    "status": "great"
   },
   "getBytes:bytesPerRow:bytesPerImage:fromRegion:mipmapLevel:slice:": {
@@ -3262,27 +3262,27 @@
   },
   "gpuResourceID": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1112-1115 (model-reviewed, not tested)",
-   "note": "Lazily assigns and returns nvmtl_resid_for_texture under lock.",
+   "note": "Lazily assigns and returns nvmtl_resid_for_texture under lock. [confirmed by a second review]",
    "status": "great"
   },
   "hazardTrackingMode": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1324; NVMTLObjects.h:310-312 (model-reviewed, not tested)",
-   "note": "Reads hazard mode from heap or resource options via nvmtl_res_hazard.",
+   "note": "Reads hazard mode from heap or resource options via nvmtl_res_hazard. [confirmed by a second review]",
    "status": "great"
   },
   "heap": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1153 (model-reviewed, not tested)",
-   "note": "Returns _heap or _subHeap when the texture was heap-allocated.",
+   "note": "Returns _heap or _subHeap when the texture was heap-allocated. [confirmed by a second review]",
    "status": "great"
   },
   "heapOffset": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1154 (model-reviewed, not tested)",
-   "note": "Returns stored _heapOffset for heap-placed textures.",
+   "note": "Returns stored _heapOffset for heap-placed textures. [confirmed by a second review]",
    "status": "great"
   },
   "height": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1305 (model-reviewed, not tested)",
-   "note": "Returns max(1, image height >> baseLevel).",
+   "note": "Returns max(1, image height >> baseLevel). [confirmed by a second review]",
    "status": "great"
   },
   "iosurface": {
@@ -3292,42 +3292,42 @@
   },
   "iosurfacePlane": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1318 (model-reviewed, not tested)",
-   "note": "Returns the stored plane index used at IOSurface creation.",
+   "note": "Returns the stored plane index used at IOSurface creation. [confirmed by a second review]",
    "status": "great"
   },
   "isAliasable": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1327 (model-reviewed, not tested)",
-   "note": "Returns _aliased under synchronization after makeAliasable.",
+   "note": "Returns _aliased under synchronization after makeAliasable. [confirmed by a second review]",
    "status": "great"
   },
   "isFramebufferOnly": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1321; NVMTLDevice.m:752-754 (model-reviewed, not tested)",
-   "note": "Returns _fbo from descriptor framebufferOnly on the root texture.",
+   "note": "Returns _fbo from descriptor framebufferOnly on the root texture. [confirmed by a second review]",
    "status": "great"
   },
   "isShareable": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1341 (model-reviewed, not tested)",
-   "note": "Returns _shareable on root textures; views always NO.",
+   "note": "Returns _shareable on root textures; views always NO. [confirmed by a second review]",
    "status": "great"
   },
   "isSparse": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1343 (model-reviewed, not tested)",
-   "note": "True when owning heap or subHeap has MTLHeapTypeSparse.",
+   "note": "True when owning heap or subHeap has MTLHeapTypeSparse. [confirmed by a second review]",
    "status": "great"
   },
   "label": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1347 (model-reviewed, not tested)",
-   "note": "Returns the stored _label string.",
+   "note": "Returns the stored _label string. [confirmed by a second review]",
    "status": "great"
   },
   "makeAliasable": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:1328-1336 (model-reviewed, not tested)",
-   "note": "Marks aliasable and releases sub-heap charge/range when applicable.",
-   "status": "great"
+   "evidence": "read from source: plugin/NVMTLObjects.m:1328-1335,3747,3757 (model-reviewed, not tested)",
+   "note": "No-op for placement-heap textures (_heap); only releases _subHeap charge/range. [second review]",
+   "status": "improve"
   },
   "mipmapLevelCount": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1307 (model-reviewed, not tested)",
-   "note": "Views use _mips; roots use image mip count with a floor of 1.",
+   "note": "Views use _mips; roots use image mip count with a floor of 1. [confirmed by a second review]",
    "status": "great"
   },
   "newRemoteTextureViewForDevice:": {
@@ -3342,7 +3342,7 @@
   },
   "newTextureViewWithPixelFormat:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1480-1519 (model-reviewed, not tested)",
-   "note": "Builds format views via nvmtlViewWithFormat over full mip range, including depth aspects.",
+   "note": "Builds format views via nvmtlViewWithFormat over full mip range, including depth aspects. [confirmed by a second review]",
    "status": "great"
   },
   "newTextureViewWithPixelFormat:textureType:levels:slices:": {
@@ -3357,22 +3357,22 @@
   },
   "parentRelativeLevel": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1311 (model-reviewed, not tested)",
-   "note": "Returns _relativeLevel set when the view was created.",
+   "note": "Returns _relativeLevel set when the view was created. [confirmed by a second review]",
    "status": "great"
   },
   "parentRelativeSlice": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1312 (model-reviewed, not tested)",
-   "note": "Returns _relativeSlice set when the view was created.",
+   "note": "Returns _relativeSlice set when the view was created. [confirmed by a second review]",
    "status": "great"
   },
   "parentTexture": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1308 (model-reviewed, not tested)",
-   "note": "Returns _viewParent for texture views.",
+   "note": "Returns _viewParent for texture views. [confirmed by a second review]",
    "status": "great"
   },
   "pixelFormat": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1316 (model-reviewed, not tested)",
-   "note": "Returns stored _fmt, defaulting to RGBA8Unorm if unset.",
+   "note": "Returns stored _fmt, defaulting to RGBA8Unorm if unset. [confirmed by a second review]",
    "status": "great"
   },
   "remoteStorageTexture": {
@@ -3392,22 +3392,22 @@
   },
   "resourceOptions": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1325-1326 (model-reviewed, not tested)",
-   "note": "Composes storage, cache, and hazard bits from the other property getters.",
+   "note": "Composes storage, cache, and hazard bits from the other property getters. [confirmed by a second review]",
    "status": "great"
   },
   "rootResource": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:1309 (model-reviewed, not tested)",
-   "note": "Returns view parent texture or backing buffer as the root resource.",
-   "status": "great"
+   "evidence": "read from source: plugin/NVMTLObjects.m:1309,1484-1487 (model-reviewed, not tested)",
+   "note": "Apple storage owner vs ours: returns immediate _viewParent, not _parent/buffer root. [second review]",
+   "status": "differs"
   },
   "sampleCount": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1314 (model-reviewed, not tested)",
-   "note": "Returns image sample count, floored to at least 1.",
+   "note": "Returns image sample count, floored to at least 1. [confirmed by a second review]",
    "status": "great"
   },
   "setLabel:": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1348 (model-reviewed, not tested)",
-   "note": "Copies and stores the label string on the texture.",
+   "note": "Copies and stores the label string on the texture. [confirmed by a second review]",
    "status": "great"
   },
   "setOwnerWithIdentity:": {
@@ -3422,27 +3422,27 @@
   },
   "storageMode": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1319-1320 (model-reviewed, not tested)",
-   "note": "Shareable forces Private; else heap storage or options bits.",
+   "note": "Shareable forces Private; else heap storage or options bits. [confirmed by a second review]",
    "status": "great"
   },
   "swizzle": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1342 (model-reviewed, not tested)",
-   "note": "Returns stored swizzle channels or identity when none was applied.",
+   "note": "Returns stored swizzle channels or identity when none was applied. [confirmed by a second review]",
    "status": "great"
   },
   "textureType": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1315 (model-reviewed, not tested)",
-   "note": "Views use _viewType; roots use image mtl_type.",
+   "note": "Views use _viewType; roots use image mtl_type. [confirmed by a second review]",
    "status": "great"
   },
   "usage": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1337 (model-reviewed, not tested)",
-   "note": "Returns stored usage, parent usage, or ShaderRead default.",
+   "note": "Returns stored usage, parent usage, or ShaderRead default. [confirmed by a second review]",
    "status": "great"
   },
   "width": {
    "evidence": "read from source: plugin/NVMTLObjects.m:1304 (model-reviewed, not tested)",
-   "note": "Returns max(1, image width >> baseLevel).",
+   "note": "Returns max(1, image width >> baseLevel). [confirmed by a second review]",
    "status": "great"
   }
  },
