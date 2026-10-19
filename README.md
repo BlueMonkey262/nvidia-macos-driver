@@ -20,6 +20,10 @@ Supported cards are Turing and newer: GTX 16, RTX 20, 30, 40 and 50, TITAN RTX, 
 tests mostly on an RTX 5060; this fork tests on an RTX 2060 Super (Turing) in a macOS 15.8.1 VM with GPU passthrough.
 Nothing here has been run on other cards, and macOS 26 is untested. See [card support](docs/CARD-SUPPORT.md).
 
+> **Status: experimental.** Everything here is tested on one card (an RTX 2060 Super) in a macOS 15.8.1 virtual
+> machine. If you have another NVIDIA card, you are welcome to help test: run the driver, try the tests in `tools/`, and
+> report what you see, labelled as in [docs/GAMES.md](docs/GAMES.md). Issues and pull requests are open.
+
 ## What this fork adds
 
 - **Hardware H.264 encode on Turing** (RTX 20 / GTX 16), with bitrate control, a low-latency path and a PSNR
@@ -29,7 +33,12 @@ Nothing here has been run on other cards, and macOS 26 is untested. See [card su
   residency, LOD-clamp sampler lifetime, real kernel start/end times, asynchronous compile completion handlers,
   nil-binding semantics and more. Each has a regression test in `tools/` that fails on the old plugin and passes on
   the new one. See the Git history and [FORK.md](FORK.md).
-- **Games and speed:** what runs, what doesn't, and codec benchmarks: [docs/GAMES.md](docs/GAMES.md).
+- **Games and speed:** see below and [docs/GAMES.md](docs/GAMES.md).
+
+## And it games!
+
+Terraria, Kerbal Space Program, No Man's Sky and Cities: Skylines run on it, and hardware video encode passes its
+tests (streaming through Sunshine is still being fixed). What runs, what doesn't, and the codec benchmarks are in [docs/GAMES.md](docs/GAMES.md).
 
 Results are labelled in the docs: read from source / builds / VM-tested on Turing / not tested.
 
