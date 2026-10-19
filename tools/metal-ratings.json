@@ -428,8 +428,8 @@
    "status": "great"
   },
   "copyIndirectCommandBuffer:sourceRange:destination:destinationIndex:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4722-4729 (model-reviewed, not tested)",
-   "note": "Apple encodes a GPU ICB copy; we CPU-copy slots immediately during encode. [second review]",
+   "evidence": "read from source: plugin/NVMTLObjects.m:4900-4909, :3425-3452, :4693-4709; tools/test_metal_icb_copy.m (not tested)",
+   "note": "Apple encodes a GPU ICB copy; we CPU-copy slots immediately. Commit-only mutation is also wrong: render/compute executes replay at encode time. Needs ordered command recording with resource retention; keep purple.",
    "status": "differs"
   },
   "device": {
@@ -498,8 +498,8 @@
    "status": "stub"
   },
   "resetCommandsInBuffer:withRange:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:4718-4720, :4020-4021 (model-reviewed, not tested)",
-   "note": "Apple encodes a GPU reset command; we call resetWithRange on the CPU now. [second review]",
+   "evidence": "read from source: plugin/NVMTLObjects.m:4896-4899, :3425-3452, :4693-4709; tools/test_metal_icb_copy.m (not tested)",
+   "note": "Apple encodes a GPU reset; we reset CPU slots immediately. Commit-only mutation cannot affect executes already replayed at encode time. Needs ordered command recording with resource retention; keep purple.",
    "status": "differs"
   },
   "resolveCounters:inRange:destinationBuffer:destinationOffset:": {
