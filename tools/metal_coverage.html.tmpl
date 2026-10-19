@@ -10,10 +10,10 @@ h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 12px;padding:0;list-style:none}
 .legend li{display:flex;align-items:center;gap:6px}
 .sw{width:14px;height:14px;border-radius:2px;display:inline-block}
-#map{position:relative;width:100%}
-.g{position:absolute;box-shadow:0 0 0 2px var(--bg) inset;background:var(--panel);pointer-events:none}.g>.c{pointer-events:auto}
+#map{position:relative;width:100%;background:var(--bg)}
+.g{position:absolute;pointer-events:none}.g>.c{pointer-events:auto}.g>.o{position:absolute;inset:0;border:2px solid var(--bg);pointer-events:none}
 .g>.t{position:absolute;left:4px;top:2px;font-size:11px;font-weight:700;color:#fff;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none;white-space:nowrap;overflow:hidden;max-width:calc(100% - 6px);z-index:2}
-.c{position:absolute;box-sizing:border-box;border:1px solid var(--bg)}.g>.c:first-of-type{}
+.c{position:absolute;box-sizing:border-box;border:.5px solid var(--bg)}
 .missing{background:var(--missing)}.slow{background:var(--slow)}.improve{background:var(--improve)}.great{background:var(--great)}.differs{background:var(--differs)}
 .unrated{background:var(--unrated)}
 #tip{position:fixed;display:none;background:#000d;color:#fff;padding:6px 8px;border-radius:4px;font-size:12px;max-width:420px;pointer-events:none;z-index:9;word-break:break-all}
@@ -40,19 +40,22 @@ function layout(items,x,y,w,h){const out=[];let rest=items.slice(),total=rest.re
   for(const it of row){const l=it.v/sum*side;out.push(horiz?{it,x,y:y+o,w:th,h:l}:{it,x:x+o,y,w:l,h:th});o+=l}
   rest=rest.slice(row.length);total-=sum;if(horiz){x+=th;w-=th}else{y+=th;h-=th}}
  return out}
-function squares(n,w,h){let lo=1,hi=Math.min(w,h);for(let i=0;i<30;i++){const m=(lo+hi)/2;Math.floor(w/m)*Math.floor(h/m)>=n?lo=m:hi=m}
- const sq=Math.max(1,Math.floor(lo*10)/10);return{sq,cols:Math.max(1,Math.floor(w/sq))}}
-function draw(){map.innerHTML="";const W=map.clientWidth,H=Math.round(W*0.5);map.style.height=H+"px";
+// Cells fill their block exactly: the block is cut into rows and each row's cells are stretched to the row's width,
+// so a block has no empty space and its cells are close to square.
+function rowsOf(n,w,h){const rows=Math.max(1,Math.min(n,Math.round(Math.sqrt(n*h/w))));
+ return Array.from({length:rows},(_,r)=>Math.floor(n/rows)+(r<n%rows?1:0))}
+function draw(){map.innerHTML="";const W=map.clientWidth,H=Math.round(W*0.45);map.style.height=H+"px";
  const items=D.groups.map(g=>({g,v:g.cells.length})).sort((a,b)=>b.v-a.v);
  for(const r of layout(items,0,0,W,H)){const g=r.it.g,e=document.createElement("div");e.className="g";
   Object.assign(e.style,{left:r.x+"px",top:r.y+"px",width:r.w+"px",height:r.h+"px"});
-  const {sq,cols}=squares(g.cells.length,r.w-3,r.h-3);
-  g.cells.forEach((c,i)=>{const d=document.createElement("div");d.className="c "+c.st;
-   Object.assign(d.style,{left:1.5+(i%cols)*sq+"px",top:1.5+Math.floor(i/cols)*sq+"px",width:sq+"px",height:sq+"px"});
+  const iw=r.w-2,ih=r.h-2,per=rowsOf(g.cells.length,iw,ih);let i=0;
+  per.forEach((count,row)=>{for(let c=0;c<count;c++,i++){const cell=g.cells[i],d=document.createElement("div");d.className="c "+cell.st;
+   Object.assign(d.style,{left:1+c*iw/count+"px",top:1+row*ih/per.length+"px",width:iw/count+"px",height:ih/per.length+"px"});
    d.onmousemove=ev=>{tip.style.display="block";tip.style.left=Math.min(ev.clientX+12,innerWidth-440)+"px";tip.style.top=ev.clientY+14+"px";
-    tip.textContent=g.p+" "+c.s+"\n"+NAMES[c.st]+(c.req?"":" (optional)")+(c.n?"\n"+c.n:"")+(c.e?"\nevidence: "+c.e:"");tip.style.whiteSpace="pre-wrap"};
-   d.onmouseleave=()=>tip.style.display="none";e.appendChild(d)});
-  if(r.w>60&&r.h>24){const t=document.createElement("div");t.className="t";t.textContent=g.p.replace(/^MTL/,"");e.appendChild(t)}
+    tip.textContent=g.p+" "+cell.s+"\n"+NAMES[cell.st]+(cell.req?"":" (optional)")+(cell.n?"\n"+cell.n:"")+(cell.e?"\nevidence: "+cell.e:"");tip.style.whiteSpace="pre-wrap"};
+   d.onmouseleave=()=>tip.style.display="none";e.appendChild(d)}});
+  const o=document.createElement("div");o.className="o";e.appendChild(o);
+  if(r.w>40&&r.h>22){const t=document.createElement("div");t.className="t";t.textContent=g.p.replace(/^MTL/,"").slice(0,Math.floor((r.w-10)/7));e.appendChild(t)}
   map.appendChild(e)}}
 draw();addEventListener("resize",draw);
 </script></body></html>
