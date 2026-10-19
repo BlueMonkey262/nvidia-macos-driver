@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 602" width="1200" height="602" font-family="sans-serif"><rect width="1200" height="602" fill="#0f1218"/>
-<text x="6" y="22" font-size="16" font-weight="700" fill="#e6e9ef">Metal API coverage: 708/901 methods implemented (79%), 33 of them by Apple's own code</text>
-<rect x="6" y="36" width="12" height="12" fill="#6b7280"/><text x="23" y="47" font-size="12" fill="#c9ced8">Not implemented or stub (193)</text>
+<text x="6" y="22" font-size="16" font-weight="700" fill="#e6e9ef">Metal API coverage: 699/901 methods implemented (78%), 33 of them by Apple's own code</text>
+<rect x="6" y="36" width="12" height="12" fill="#6b7280"/><text x="23" y="47" font-size="12" fill="#c9ced8">Not implemented or stub (202)</text>
 <rect x="240" y="36" width="12" height="12" fill="#2fa6a0"/><text x="257" y="47" font-size="12" fill="#c9ced8">Apple's code, not ours (33)</text>
-<rect x="460" y="36" width="12" height="12" fill="#dc2626"/><text x="477" y="47" font-size="12" fill="#c9ced8">Very slow (8)</text>
-<rect x="582" y="36" width="12" height="12" fill="#eab308"/><text x="599" y="47" font-size="12" fill="#c9ced8">Needs improvement (111)</text>
-<rect x="774" y="36" width="12" height="12" fill="#22a559"/><text x="791" y="47" font-size="12" fill="#c9ced8">Works great (300)</text>
-<rect x="924" y="36" width="12" height="12" fill="#9333ea"/><text x="941" y="47" font-size="12" fill="#c9ced8">Differs from Apple (53)</text>
-<rect x="1116" y="36" width="12" height="12" fill="#4f78c4"/><text x="1133" y="47" font-size="12" fill="#c9ced8">Not yet rated (203)</text>
+<rect x="460" y="36" width="12" height="12" fill="#dc2626"/><text x="477" y="47" font-size="12" fill="#c9ced8">Very slow (9)</text>
+<rect x="582" y="36" width="12" height="12" fill="#eab308"/><text x="599" y="47" font-size="12" fill="#c9ced8">Needs improvement (95)</text>
+<rect x="767" y="36" width="12" height="12" fill="#22a559"/><text x="784" y="47" font-size="12" fill="#c9ced8">Works great (354)</text>
+<rect x="917" y="36" width="12" height="12" fill="#9333ea"/><text x="934" y="47" font-size="12" fill="#c9ced8">Differs from Apple (66)</text>
+<rect x="1109" y="36" width="12" height="12" fill="#4f78c4"/><text x="1126" y="47" font-size="12" fill="#c9ced8">Not yet rated (142)</text>
 <g><title>MTLRenderCommandEncoder: Not implemented or stub 30, Very slow 3, Needs improvement 19, Works great 52, Differs from Apple 32</title>
 <rect x="1.00" y="63.00" width="26.07" height="25.90" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="27.07" y="63.00" width="26.07" height="25.90" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
@@ -326,53 +326,53 @@
 <rect x="340.95" y="62.00" width="181.13" height="202.50" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="345.95" y="77.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Texture</text>
 </g>
-<g><title>MTLComputeCommandEncoder: Not implemented or stub 3, Needs improvement 15, Not yet rated 28</title>
-<rect x="341.95" y="265.50" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="367.54" y="265.50" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="393.14" y="265.50" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="418.73" y="265.50" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="444.32" y="265.50" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<g><title>MTLComputeCommandEncoder: Not implemented or stub 10, Very slow 1, Needs improvement 9, Works great 21, Differs from Apple 5</title>
+<rect x="341.95" y="265.50" width="25.59" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="367.54" y="265.50" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="393.14" y="265.50" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="418.73" y="265.50" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="444.32" y="265.50" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="469.91" y="265.50" width="25.59" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="495.50" y="265.50" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="341.95" y="291.31" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="367.54" y="291.31" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="393.14" y="291.31" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="418.73" y="291.31" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="444.32" y="291.31" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="341.95" y="291.31" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="367.54" y="291.31" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="393.14" y="291.31" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="418.73" y="291.31" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="444.32" y="291.31" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="469.91" y="291.31" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="495.50" y="291.31" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="495.50" y="291.31" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="341.95" y="317.11" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="367.54" y="317.11" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="393.14" y="317.11" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="418.73" y="317.11" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="393.14" y="317.11" width="25.59" height="25.81" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="418.73" y="317.11" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="444.32" y="317.11" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="469.91" y="317.11" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="495.50" y="317.11" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="341.95" y="342.92" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="367.54" y="342.92" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="393.14" y="342.92" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="418.73" y="342.92" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="444.32" y="342.92" width="25.59" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="469.91" y="342.92" width="25.59" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="469.91" y="317.11" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="495.50" y="317.11" width="25.59" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="341.95" y="342.92" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="367.54" y="342.92" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="393.14" y="342.92" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="418.73" y="342.92" width="25.59" height="25.81" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="444.32" y="342.92" width="25.59" height="25.81" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="469.91" y="342.92" width="25.59" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="495.50" y="342.92" width="25.59" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="341.95" y="368.73" width="29.86" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="371.81" y="368.73" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="401.67" y="368.73" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="431.52" y="368.73" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="461.38" y="368.73" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="491.23" y="368.73" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="341.95" y="394.53" width="29.86" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="371.81" y="394.53" width="29.86" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="401.67" y="394.53" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="431.52" y="394.53" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="461.38" y="394.53" width="29.86" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="491.23" y="394.53" width="29.86" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="341.95" y="420.34" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="371.81" y="420.34" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="401.67" y="420.34" width="29.86" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="431.52" y="420.34" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="461.38" y="420.34" width="29.86" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="491.23" y="420.34" width="29.86" height="25.81" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="371.81" y="368.73" width="29.86" height="25.81" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="401.67" y="368.73" width="29.86" height="25.81" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="431.52" y="368.73" width="29.86" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="461.38" y="368.73" width="29.86" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="491.23" y="368.73" width="29.86" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="341.95" y="394.53" width="29.86" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="371.81" y="394.53" width="29.86" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="401.67" y="394.53" width="29.86" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="431.52" y="394.53" width="29.86" height="25.81" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="461.38" y="394.53" width="29.86" height="25.81" fill="#dc2626" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="491.23" y="394.53" width="29.86" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="341.95" y="420.34" width="29.86" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="371.81" y="420.34" width="29.86" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="401.67" y="420.34" width="29.86" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="431.52" y="420.34" width="29.86" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="461.38" y="420.34" width="29.86" height="25.81" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="491.23" y="420.34" width="29.86" height="25.81" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="340.95" y="264.50" width="181.13" height="182.65" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="345.95" y="279.50" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">ComputeCommandEncoder</text>
 </g>
@@ -637,25 +637,25 @@
 <rect x="1002.83" y="62.00" width="98.58" height="131.32" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1007.83" y="77.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">IOCommandBuf</text>
 </g>
-<g><title>MTLRenderPipelineState: Not implemented or stub 1, Needs improvement 6, Not yet rated 11</title>
-<rect x="1102.42" y="63.00" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1126.56" y="63.00" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1150.71" y="63.00" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1174.85" y="63.00" width="24.15" height="25.86" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1102.42" y="88.86" width="24.15" height="25.86" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1126.56" y="88.86" width="24.15" height="25.86" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1150.71" y="88.86" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1174.85" y="88.86" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1102.42" y="114.73" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1126.56" y="114.73" width="24.15" height="25.86" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1150.71" y="114.73" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1174.85" y="114.73" width="24.15" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<g><title>MTLRenderPipelineState: Not implemented or stub 3, Works great 11, Differs from Apple 4</title>
+<rect x="1102.42" y="63.00" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1126.56" y="63.00" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1150.71" y="63.00" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1174.85" y="63.00" width="24.15" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1102.42" y="88.86" width="24.15" height="25.86" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1126.56" y="88.86" width="24.15" height="25.86" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1150.71" y="88.86" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1174.85" y="88.86" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1102.42" y="114.73" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1126.56" y="114.73" width="24.15" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1150.71" y="114.73" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1174.85" y="114.73" width="24.15" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1102.42" y="140.59" width="32.19" height="25.86" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1134.61" y="140.59" width="32.19" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1166.81" y="140.59" width="32.19" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1102.42" y="166.45" width="32.19" height="25.86" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1134.61" y="166.45" width="32.19" height="25.86" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1166.81" y="166.45" width="32.19" height="25.86" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1134.61" y="140.59" width="32.19" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1166.81" y="140.59" width="32.19" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1102.42" y="166.45" width="32.19" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1134.61" y="166.45" width="32.19" height="25.86" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1166.81" y="166.45" width="32.19" height="25.86" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1101.42" y="62.00" width="98.58" height="131.32" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1106.42" y="77.00" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">RenderPipeli</text>
 </g>
@@ -791,20 +791,20 @@
 <rect x="774.13" y="405.23" width="95.03" height="98.39" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="779.13" y="420.23" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">ComputePipel</text>
 </g>
-<g><title>MTLFunction: Needs improvement 2, Differs from Apple 1, Not yet rated 10</title>
-<rect x="775.13" y="504.61" width="23.26" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="798.39" y="504.61" width="23.26" height="24.10" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="821.64" y="504.61" width="23.26" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<g><title>MTLFunction: Needs improvement 1, Works great 10, Differs from Apple 2</title>
+<rect x="775.13" y="504.61" width="23.26" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="798.39" y="504.61" width="23.26" height="24.10" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="821.64" y="504.61" width="23.26" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="844.90" y="504.61" width="23.26" height="24.10" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="775.13" y="528.71" width="31.01" height="24.10" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="806.14" y="528.71" width="31.01" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="837.15" y="528.71" width="31.01" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="775.13" y="552.81" width="31.01" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="806.14" y="552.81" width="31.01" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="837.15" y="552.81" width="31.01" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="775.13" y="576.90" width="31.01" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="806.14" y="576.90" width="31.01" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="837.15" y="576.90" width="31.01" height="24.10" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="806.14" y="528.71" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="837.15" y="528.71" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="775.13" y="552.81" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="806.14" y="552.81" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="837.15" y="552.81" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="775.13" y="576.90" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="806.14" y="576.90" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="837.15" y="576.90" width="31.01" height="24.10" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="774.13" y="503.61" width="95.03" height="98.39" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="779.13" y="518.61" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Function</text>
 </g>
@@ -915,17 +915,17 @@
 <rect x="869.16" y="453.54" width="96.89" height="74.23" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="874.16" y="468.54" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Rasterizatio</text>
 </g>
-<g><title>MTLTextureBinding: Needs improvement 3, Not yet rated 7</title>
-<rect x="870.16" y="528.77" width="23.72" height="24.08" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="893.88" y="528.77" width="23.72" height="24.08" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="917.60" y="528.77" width="23.72" height="24.08" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="941.33" y="528.77" width="23.72" height="24.08" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="870.16" y="552.85" width="31.63" height="24.08" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="901.79" y="552.85" width="31.63" height="24.08" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="933.42" y="552.85" width="31.63" height="24.08" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="870.16" y="576.92" width="31.63" height="24.08" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="901.79" y="576.92" width="31.63" height="24.08" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="933.42" y="576.92" width="31.63" height="24.08" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<g><title>MTLTextureBinding: Works great 7, Differs from Apple 3</title>
+<rect x="870.16" y="528.77" width="23.72" height="24.08" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="893.88" y="528.77" width="23.72" height="24.08" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="917.60" y="528.77" width="23.72" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="941.33" y="528.77" width="23.72" height="24.08" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="870.16" y="552.85" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="901.79" y="552.85" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="933.42" y="552.85" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="870.16" y="576.92" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="901.79" y="576.92" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="933.42" y="576.92" width="31.63" height="24.08" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="869.16" y="527.77" width="96.89" height="74.23" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="874.16" y="542.77" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">TextureBindi</text>
 </g>
@@ -1062,10 +1062,10 @@
 <rect x="1044.03" y="486.72" width="56.15" height="38.43" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1049.03" y="501.72" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Event</text>
 </g>
-<g><title>MTLFence: Not yet rated 3</title>
-<rect x="1045.03" y="526.15" width="18.05" height="36.43" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1063.08" y="526.15" width="18.05" height="36.43" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1081.13" y="526.15" width="18.05" height="36.43" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<g><title>MTLFence: Works great 3</title>
+<rect x="1045.03" y="526.15" width="18.05" height="36.43" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1063.08" y="526.15" width="18.05" height="36.43" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1081.13" y="526.15" width="18.05" height="36.43" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1044.03" y="525.15" width="56.15" height="38.43" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1049.03" y="540.15" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Fence</text>
 </g>
@@ -1083,9 +1083,9 @@
 <rect x="1100.18" y="486.72" width="59.89" height="36.03" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1105.18" y="501.72" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Sampler</text>
 </g>
-<g><title>MTLCounterSet: Not yet rated 2</title>
-<rect x="1161.07" y="487.72" width="18.96" height="34.03" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="1180.04" y="487.72" width="18.96" height="34.03" fill="#4f78c4" stroke="#0f1218" stroke-width="0.5"/>
+<g><title>MTLCounterSet: Works great 2</title>
+<rect x="1161.07" y="487.72" width="18.96" height="34.03" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="1180.04" y="487.72" width="18.96" height="34.03" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="1160.07" y="486.72" width="39.93" height="36.03" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="1165.07" y="501.72" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">Coun</text>
 </g>
