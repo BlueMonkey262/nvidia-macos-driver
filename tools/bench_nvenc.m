@@ -1,4 +1,4 @@
-// bench_nvenc: how fast does the hardware H.264 encoder take frames through VideoToolbox? Opens a hardware session,
+// bench_nvenc: how fast does the hardware H.264 or HEVC encoder take frames through VideoToolbox? Opens a hardware session,
 // feeds N synthetic NV12 frames in real-time mode and measures, over several runs: throughput (frames per second from the
 // first submit to the last output), latency of each frame (submit to output callback: median, 95th percentile, worst) and
 // CPU time per frame (user + system, whole process). A run includes session setup in none of the numbers.
@@ -17,6 +17,7 @@
 enum { RING = 8 };
 static double *g_sub, *g_out;              // per frame: submit time and output time, ms
 static _Atomic int g_done;
+static CMVideoCodecType g_codec;
 
 static double now_ms(void) { return clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e6; }
 static double cpu_ms(void)
@@ -45,6 +46,11 @@ static void cb(void *refcon, void *src, OSStatus st, VTEncodeInfoFlags f, CMSamp
 {
     intptr_t i = (intptr_t)src - 1;
     if (st || !sb || i < 0) return;
+    CMFormatDescriptionRef format = CMSampleBufferGetFormatDescription(sb);
+    if (!format || CMFormatDescriptionGetMediaSubType(format) != g_codec) {
+        fprintf(stderr, "encoded sample codec differs from requested codec\n");
+        return;
+    }
     g_out[i] = now_ms();
     atomic_fetch_add(&g_done, 1);
 }
@@ -54,6 +60,8 @@ int main(int argc, char **argv)
     @autoreleasepool {
         int w = argc > 2 ? atoi(argv[1]) : 1920, h = argc > 2 ? atoi(argv[2]) : 1080;
         int n = argc > 3 ? atoi(argv[3]) : 300, runs = argc > 4 ? atoi(argv[4]) : 5;
+        g_codec = getenv("BENCH_CODEC") && !strcmp(getenv("BENCH_CODEC"), "hevc") ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264;
+        printf("Requested codec: %s (checked against every encoded sample)\n", g_codec == kCMVideoCodecType_HEVC ? "HEVC" : "H.264");
         double load[1] = { 0 }; getloadavg(load, 1);
         id<MTLDevice> dev = MTLCreateSystemDefaultDevice();    // brings the plugin up, which registers the encoder here
         printf("Metal device: %s   load average %.2f   %dx%d, %d frames, %d runs\n", dev ? dev.name.UTF8String : "(none)", load[0], w, h, n, runs);
@@ -66,7 +74,7 @@ int main(int argc, char **argv)
             atomic_store(&g_done, 0);
             VTCompressionSessionRef cs = NULL;
             NSDictionary *spec = @{ (id)kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: @YES };
-            OSStatus st = VTCompressionSessionCreate(NULL, w, h, (getenv("BENCH_CODEC") && !strcmp(getenv("BENCH_CODEC"), "hevc") ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264), (__bridge CFDictionaryRef)spec, NULL, NULL, cb, NULL, &cs);
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h, g_codec, (__bridge CFDictionaryRef)spec, NULL, NULL, cb, NULL, &cs);
             if (st || !cs) { printf("run %d: session create failed %d\n", r + 1, (int)st); continue; }
             VTSessionSetProperty(cs, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
             VTSessionSetProperty(cs, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
