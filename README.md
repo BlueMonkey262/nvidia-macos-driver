@@ -23,16 +23,13 @@ Nothing here has been run on other cards, and macOS 26 is untested. See [card su
 ## What this fork adds
 
 - **Hardware H.264 encode on Turing** (RTX 20 / GTX 16), with bitrate control, a low-latency path and a PSNR
-  regression test: [docs/H264.md](docs/H264.md). HEVC encode is an opt-in experiment: [docs/HEVC.md](docs/HEVC.md).
+  regression test: [docs/H264.md](docs/H264.md).  HEVC encode is an opt-in experiment on a separate branch.
 - **A rated map of the whole Metal API**, above, with the review notes and the tests behind each rating.
 - **Metal behaviour fixes** found by reviewing the plugin against Apple's documentation: a use-after-free in texture
   residency, LOD-clamp sampler lifetime, real kernel start/end times, asynchronous compile completion handlers,
   nil-binding semantics and more. Each has a regression test in `tools/` that fails on the old plugin and passes on
   the new one. See the Git history and [FORK.md](FORK.md).
-- **Games:** Terraria, Kerbal Space Program (OpenGL on Metal), No Man's Sky and Cities: Skylines reach their menus and
-  render; Terraria and Cities: Skylines (a real save, about 5 fps) and No Man's Sky (a save) have been played; Factorio
-  now initialises at default settings after the per-process NVRM client limit was fixed. Slowness and gaps are listed
-  in [TODO.md](TODO.md).
+- **Games and speed:** what runs, what doesn't, and codec benchmarks: [docs/GAMES.md](docs/GAMES.md).
 
 Results are labelled in the docs: read from source / builds / VM-tested on Turing / not tested.
 
