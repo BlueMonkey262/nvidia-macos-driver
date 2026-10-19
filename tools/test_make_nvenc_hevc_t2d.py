@@ -45,6 +45,8 @@ def plant(buf):
     buf[tool.CALL_LUMA:tool.CALL_LUMA + 5] = tool.CALL_LUMA_BYTES
     buf[tool.CALL_CHROMA:tool.CALL_CHROMA + 4] = tool.CALL_CHROMA_BYTES
     buf[tool.SW_T2D:tool.SW_T2D + len(tool.SW_T2D_BYTES)] = tool.SW_T2D_BYTES
+    for at, old in tool.SDH_OLD.items():
+        buf[at] = old
     return buf
 
 
@@ -54,7 +56,8 @@ check("synthetic: both LEAs land on sw_t2d", tool.rip_target(patched, tool.LEA_R
       and tool.rip_target(patched, tool.LEA_RAX) == tool.SW_T2D)
 changed = [i for i, (a, b) in enumerate(zip(synthetic, patched)) if a != b]
 lea_span = set(range(tool.LEA_RCX, tool.LEA_RCX + 7)) | set(range(tool.LEA_RAX, tool.LEA_RAX + 7))
-check("synthetic: only LEA bytes change", set(changed) <= lea_span and len(changed) > 0, f"{len(changed)} bytes")
+check("synthetic: only LEAs and sign-hiding bytes change", set(changed) <= lea_span | set(tool.SDH_OLD)
+      and all(patched[at] == 0 for at in tool.SDH_OLD), f"{len(changed)} bytes")
 check("synthetic: sites are the sw_t2d LEAs",
       patched[tool.LEA_RCX:tool.LEA_RCX + 7] == rcx and patched[tool.LEA_RAX:tool.LEA_RAX + 7] == rax)
 check("synthetic: calls and 0xc160 are untouched",
@@ -94,8 +97,9 @@ def run_on(src: pathlib.Path):
         out = dst.read_bytes()
         raw = src.read_bytes()
         changed = [i for i, (a, b) in enumerate(zip(raw, out)) if a != b]
-        check("real library: output differs only inside the two LEAs",
-              set(changed) <= {i for i in range(0x5226, 0x5226 + 7)} | {i for i in range(0x52AA, 0x52AA + 7)}
+        check("real library: only LEAs and sign-hiding bytes change",
+              set(changed) <= lea_span | set(tool.SDH_OLD)
+              and all(out[at] == 0 for at in tool.SDH_OLD)
               and out[0x5226:0x522D] == bytes.fromhex("488d0da3050000")
               and out[0x52AA:0x52B1] == bytes.fromhex("488d051f050000"),
               f"{len(changed)} bytes")

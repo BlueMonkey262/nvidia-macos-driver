@@ -1,53 +1,90 @@
 # HEVC encode on Turing
 
-Status: **experimental, untested on hardware.** The patcher and the host checks have been run on the dev machine. Nothing here has been run on a GPU.
+The baseline encoder works on an RTX 2060 Super, macOS 15.8.1 VM. Turing support stays opt-in.
+The optional CPU speed patches below have passed machine-code emulation; their hardware quality and speed checks
+are pending. The existing bitrate controller remains H.264-only; HEVC uses constant QP.
 
-`tools/make_nvenc_hevc_t2d.py` rewrites two LEAs in `libnvenc_hevc.dylib` (sha256 prefix `aa6b8b2e76bd`, the same bytes in the 2.2.0 and 2.3.6 packages) so 8-bit luma and chroma call `sw_t2d` instead of the Blackwell swizzles. The indirect calls stay. No code cave is written, and the H.264 reference clamp is not applied. The tool then compares the register form of `sw_t2d` with the gob formula for y = 0..63 and x stepping by 8 across pitch 2048 (16384 points) and requires 0 mismatches. That compare is emulation only.
+## Baseline fix and measured results
 
-The plugin registers HEVC on Blackwell as before (`libnvenc_hevc.dylib`, no environment variable). On Turing it loads `libnvenc_hevc_t2d.dylib` only when `NVMTL_NVENC_HEVC=1`, so Sunshine and screen sharing do not pick the encoder up before a PSNR run. `NVMTL_NO_NVENC_HEVC=1` keeps the process on Apple's encoder. The VideoToolbox hook drops `EnableLowLatencyRateControl` for `'hvc1'` as well as `'avc1'`, and keeps a separate supported-property cache so a failed HEVC lookup cannot return the H.264 dictionary.
+`tools/make_nvenc_hevc_t2d.py` accepts the stock `libnvenc_hevc.dylib` with SHA-256 prefix `aa6b8b2e76bd`
+(the 2.2.0 and 2.3.6 packages ship identical bytes). It redirects the luma and chroma swizzle pointers to `sw_t2d`.
+It also disables sign data hiding in the PPS writer and both engine setup templates. With sign hiding enabled,
+Turing writes coefficient signs in a different order from the HEVC syntax; changing the header alone does not fix it.
+The default changes six bytes. Every site is checked before patching, and other library builds are refused.
 
-## Build
+The baseline hardware regression, 30 frames per size, produced:
+
+| Size | Mean / minimum Y PSNR | P-slice active references |
+|---|---|---|
+| 1280×720 | 44.7 / 44.2 dB | 1 |
+| 1920×1080 | 44.4 / 43.9 dB | 1 |
+| 1366×768 | 44.7 / 44.1 dB | 1 |
+| 2560×1440 | 44.3 / 43.8 dB | 1 |
+
+The stream checker passed at every size. The low-latency session and the supported-property lookup with an open
+session passed. A second overlapping session was refused, as expected. **VM-tested on Turing, baseline only.**
+A prior 1080p60 Sunshine/Moonlight desktop run reported 60.1 fps, 0.00% network drops and 0.78 ms decode time;
+noisy content fell to 39.6 fps. These are short runs, not a game-content or stability qualification.
+
+The unoptimized baseline benchmark at 1080p, 500 frames × 3 runs on an idle VM, was 284 fps, 3.43 ms median
+latency and 3.19 ms CPU per frame. H.264 in the same session was 425 fps, 2.31 ms and 2.35 ms CPU per frame.
+Neither codec had its optional CPU speed patches enabled in that comparison.
+
+## Build and opt-in
 
 ```bash
-python3 tools/make_nvenc_hevc_t2d.py libnvenc_hevc.dylib libnvenc_hevc_t2d.dylib   # refuses any other input library
+python3 tools/make_nvenc_hevc_t2d.py libnvenc_hevc.dylib libnvenc_hevc_t2d.dylib
 codesign -f -s - libnvenc_hevc_t2d.dylib
-# copy next to NVMTLDriver in /Library/GPUBundles/NVMTLDriver.bundle/Contents/MacOS/
-# leave the stock libnvenc_hevc.dylib in place (Blackwell, and rollback)
+# Place the signed result alongside NVMTLDriver in the installed bundle.
+# Preserve the stock library for Blackwell and a copy of the installed files for rollback.
 ```
 
-Build the plugin from this tree. A release build clears `NVMTL_*` from the environment at load and reads `/Library/GPUBundles/nvmtl/nvrm610.conf`, so the opt-in there is a line `NVMTL_NVENC_HEVC=1`. A debug plugin sees the process environment.
+Build the plugin from this tree. Turing registration requires `NVMTL_NVENC_HEVC=1`. A release plugin reads it
+from `/Library/GPUBundles/nvmtl/nvrm610.conf`; it clears `NVMTL_*` process environment variables at load.
+`NVMTL_NO_NVENC_HEVC=1` suppresses registration. Blackwell continues using the stock library.
 
-## Running the PSNR test
+The VideoToolbox hook removes `EnableLowLatencyRateControl` for H.264 and HEVC, and caches supported properties
+by both codec and frame size. This handles Sunshine's low-delay specification and its property lookup while an
+encoder session is already open.
 
-On the Mac, with the driver and `libnvenc_hevc_t2d.dylib` installed:
+## Optional CPU speed patches
+
+All default to off and compose with the baseline fix and each other:
+
+- `--inline-tile` replaces the per-8-byte indirect helper call with the same address arithmetic. A pointer comparison
+  retains the original indirect call if the session selected another swizzle, including a 10-bit layout override.
+- `--direct-row` reads aligned 8-bit rows directly, skipping their staging `memmove`. Rows needing edge padding keep
+  the original copy and fill. All 10-bit rows retain staging because the encoder can shift their samples in place.
+- `--short-zero` clears 4096 bytes of the status buffer instead of the full mapping. This remains experimental:
+  the GPU may have requirements beyond the status header the CPU reads.
 
 ```bash
-python3 tools/test_nvenc_hevc.py --log ~/nvenc-hevc.log
+python3 tools/make_nvenc_hevc_t2d.py --inline-tile --direct-row --short-zero INPUT OUTPUT
+NVENC_HEVC_DYLIB=INPUT python3 tools/test_hevc_perf_patch.py
 ```
 
-The test sets `NVMTL_NVENC_HEVC=1` and `NVMTL_NO_NVDEC_HEVC=1` on the encode tool (`NVMTL_NO_NVDEC` does not cover HEVC decode). On a release plugin those variables have to be in `nvrm610.conf` as well, because the process environment is cleared. It builds `tools/nvenc_psnr_hevc.m`, encodes at four sizes (1280x720, 1920x1080, 1366x768, 2560x1440), decodes with Apple's software decoder, and requires mean and minimum Y PSNR of at least 40 dB. 1366 is not a multiple of 16; the library aligns the coded size to 32. It then runs `tools/hevc_refs.py` on each Annex B dump. Exit 0 passes, 1 fails, 77 means skipped (not macOS).
+Readable reference assembly is in `tools/nvenc_hevc_perf.S`; the test checks that GNU as reproduces the embedded
+bytes when the assembler tools are available. The machine-code test requires Unicorn and Capstone. It executes the actual original and patched row loops at a
+relocated load address: 32 comparisons, including both planes, padded widths, 8/10-bit inputs and another swizzle.
+It also checks the other helper fallback, preserved registers, branch destinations, all flag combinations,
+unchanged input data, and rejection of changed sites or occupied caves. **Host emulation passed; no GPU involved.**
+The default patcher and HEVC stream-parser tests also pass. No performance gain is claimed for these flags yet.
 
-The log should say the HEVC encoder is REGISTERED and the library path ends in `_t2d`. A wrong tile is the 17-28 dB band; a correct picture on the H.264 clip was about 42 dB or more. Overlap (a second session while the first is open) is expected to fail with -12908, one engine per process. The test records it and does not fail the run unless `--overlap-required` is given.
+## Hardware validation still required
 
-`tools/hevc_refs.py FILE.hevc` exits 0 only when every IDR is preceded by VPS, SPS and PPS, the stream is 8-bit 4:2:0, no slice sets SAO while the SPS disables it, and no P slice's active L0 count exceeds sub-layer 0 `sps_max_dec_pic_buffering_minus1`. It prints max CTU log2. 5 (32x32) is the expected value. A 6 is recorded and does not fail. More than one reference does not fail by itself.
+When games and streaming are idle, back up the installed files and test each speed flag separately before the
+combined build. Run `tools/test_nvenc_hevc.py` for each: four sizes × 30 frames, mean and minimum Y PSNR ≥40 dB,
+parameter sets and L0-reference checks, low-latency creation and the property lookup. Then compare
+`BENCH_CODEC=hevc bench_nvenc 1920 1080 500 3` and 720p against the baseline in the same idle session.
+Restore the installed files on failures or timeouts. Run the equivalent H.264 regression after the plugin changes.
 
-## If a VM run fails
+Only after those pass, test Sunshine/Moonlight on varied game content with bitrate control. Watch for encoder
+creation failures, decode errors, drops and actual wire bitrate. The 10-bit paths are protected by fallback checks
+in emulation but remain unqualified on hardware. Other cards and long-running sessions are untested.
 
-Read the `nve265:` lines before changing the LEAs again.
+## Rollback and limits
 
-- Channel error, engine dead, or a nonzero ucode, and no picture: the setup image was rejected. Do not touch the LEAs. That is the expected first outcome of a tiling-only library, not a failed patch.
-- A picture decodes, Y PSNR is under 40, and the channel stays healthy: the tile formula is wrong on this card. Only then put a cave at `0xc160` and point both LEAs at it. The indirect calls stay.
-- Y PSNR is at least 40 and `hevc_refs.py` exits 0: drop the `NVMTL_NVENC_HEVC` getenv in a separate change, then one Sunshine to Moonlight HEVC stream (`hevc_videotoolbox`, 1080p60).
-- Y PSNR is at least 40 and `hevc_refs.py` exits 1: patch only the field that failed. The ref-count candidate is `0x8f9a` (`cmp r12d, 4; mov eax, 4` becomes `cmp r12d, 1; mov eax, 1`). It is not in `make_nvenc_hevc_t2d.py`.
-
-## Rollback
-
-`unset NVMTL_NVENC_HEVC`, or set `NVMTL_NO_NVENC_HEVC=1`, and delete `libnvenc_hevc_t2d.dylib`. Remove the conf line if one was added. No kext, OpenCore, or host change. Blackwell keeps using the stock `libnvenc_hevc.dylib`.
-
-## Known limits
-
-- Constant QP: `AverageBitRate` is accepted and ignored by the library. Not measured for HEVC.
-- One engine per process. A second session is refused (-12908). Not measured for HEVC; this is what the H.264 library does.
-- CPU-side tiling through the 256 MB BAR1. Not measured for HEVC.
-- 10-bit (Main10, P010) waits until the 8-bit PSNR gate passes. The LEA patch already points 10-bit luma at `sw_t2d`.
-- Not tested on hardware.
+Restore the saved plugin and library, or remove the Turing opt-in from the configuration and restart affected apps.
+No kext or bootloader changes are needed. One simultaneous session per process remains the measured limit.
+Small-BAR mapping pressure can still prevent session creation even with free VRAM; the H.264 low-BAR patch has
+not been ported to HEVC. The closed library alone ignores `AverageBitRate` and runs at constant QP.

@@ -2,7 +2,7 @@
 // feeds N synthetic NV12 frames in real-time mode and measures, over several runs: throughput (frames per second from the
 // first submit to the last output), latency of each frame (submit to output callback: median, 95th percentile, worst) and
 // CPU time per frame (user + system, whole process). A run includes session setup in none of the numbers.
-// usage: bench_nvenc [width height [frames [runs]]]         default 1920 1080 300 5
+// usage: [BENCH_CODEC=hevc] bench_nvenc [width height [frames [runs]]]   (H.264 unless BENCH_CODEC=hevc; HEVC needs the opt-in described in docs/HEVC.md)         default 1920 1080 300 5
 // output: one "run" line per run, then   RESULT <w> <h> <fps median> <fps min> <p50 ms> <p95 ms> <max ms> <cpu ms/frame>
 // build: clang -fobjc-arc -O1 -o bench_nvenc bench_nvenc.m -framework Foundation -framework VideoToolbox \
 //          -framework CoreMedia -framework CoreVideo -framework Metal
@@ -10,6 +10,7 @@
 #import <VideoToolbox/VideoToolbox.h>
 #import <Metal/Metal.h>
 #include <stdatomic.h>
+#include <string.h>
 #include <sys/resource.h>
 #include <stdlib.h>
 
@@ -65,7 +66,7 @@ int main(int argc, char **argv)
             atomic_store(&g_done, 0);
             VTCompressionSessionRef cs = NULL;
             NSDictionary *spec = @{ (id)kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: @YES };
-            OSStatus st = VTCompressionSessionCreate(NULL, w, h, kCMVideoCodecType_H264, (__bridge CFDictionaryRef)spec, NULL, NULL, cb, NULL, &cs);
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h, (getenv("BENCH_CODEC") && !strcmp(getenv("BENCH_CODEC"), "hevc") ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264), (__bridge CFDictionaryRef)spec, NULL, NULL, cb, NULL, &cs);
             if (st || !cs) { printf("run %d: session create failed %d\n", r + 1, (int)st); continue; }
             VTSessionSetProperty(cs, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
             VTSessionSetProperty(cs, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
