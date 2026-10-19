@@ -1,9 +1,10 @@
 # HEVC encode on Turing
 
 The baseline encoder works on an RTX 2060 Super, macOS 15.8.1 VM. Turing support stays opt-in.
-The optional CPU speed patches below have passed machine-code emulation; their hardware quality and speed checks
-are pending. The new HEVC bitrate-control wiring builds and passes a mocked callback test, but its achieved
-bitrate on the GPU has not been measured.
+The optional CPU speed patches below pass machine-code emulation and the four-size hardware quality regression.
+Direct-row copying improves the measured 1080p throughput by about 6%. The new HEVC bitrate-control hook tracks
+2/4/8 Mbit/s targets in a standalone hardware probe. Picture correctness while QP changes and real-content streaming
+through the new hook remain unqualified; the installed plugin still lacks HEVC feedback.
 
 ## Baseline fix and measured results
 
@@ -23,7 +24,7 @@ The baseline hardware regression, 30 frames per size, produced:
 | 2560×1440 | 44.3 / 43.8 dB | 1 |
 
 The stream checker passed at every size. The low-latency session and the supported-property lookup with an open
-session passed. A second overlapping session was refused, as expected. **VM-tested on Turing, baseline only.**
+session passed. A second overlapping session was refused, as expected. **VM-tested on Turing.**
 A prior 1080p60 Sunshine/Moonlight desktop run reported 60.1 fps, 0.00% network drops and 0.78 ms decode time;
 noisy content fell to 39.6 fps. These are short runs, not a game-content or stability qualification.
 
@@ -69,7 +70,61 @@ bytes when the assembler tools are available. The machine-code test requires Uni
 relocated load address: 32 comparisons, including both planes, padded widths, 8/10-bit inputs and another swizzle.
 It also checks the other helper fallback, preserved registers, branch destinations, all flag combinations,
 unchanged input data, and rejection of changed sites or occupied caves. **Host emulation passed; no GPU involved.**
-The default patcher and HEVC stream-parser tests also pass. No performance gain is claimed for these flags yet.
+The default patcher and HEVC stream-parser tests also pass.
+
+### Hardware A/B results, 2026-10-18
+
+Each flag separately and all three combined passed the four-size, 30-frame-per-size regression with zero failures.
+Reported mean/minimum Y PSNR values matched the baseline table above; reference, low-latency and property-lookup
+checks also passed. The installed baseline library was restored and its hash verified after the experiments.
+These tests cover 8-bit synthetic content on the reference Turing card, not Main10 or long-session stability.
+
+`bench_nvenc` required hardware encoding and checked every output sample's codec. Each result below is the median
+of three 600-frame runs; session setup and synthetic-frame generation are excluded. Baseline repeats bracketed the
+variants: 720p was 662–664 fps and 1080p was 299–301 fps. The initial 720p baseline used 300 frames per run;
+the 600-frame repeat agreed. The synthetic eight-frame ring measures encode throughput, not screen capture.
+
+| HEVC library | 720p fps | 1080p fps | 1440p fps | 1080p p50 / p95 ms | 1080p CPU ms/frame |
+|---|---:|---:|---:|---:|---:|
+| Baseline | 664 | 301 | 173 | 3.30 / 3.42 | 3.32 |
+| `--inline-tile` | 670 | 304 | 174 | 3.27 / 3.40 | 3.29 |
+| `--direct-row` | 690 | 318 | 181 | 3.13 / 3.24 | 3.15 |
+| `--short-zero` | 651 | 297 | 169 | 3.33 / 3.56 | 3.37 |
+| All three | 679 | 315 | 182 | 3.15 / 3.25 | 3.18 |
+
+Direct-row is the strongest individual candidate (about 6% at 1080p). Inline tiling's roughly 1% difference needs
+more repetitions to establish a useful gain. Short-zero showed no benefit and had 32–35 ms outliers at 720p/1080p;
+keep it off. Combining all flags did not beat direct-row at 1080p. All flags remain opt-in.
+
+The same-session installed H.264 baseline, with its low-BAR patch but without optional speed flags, measured
+847 fps at 720p and 421 fps at 1080p (1080p p50 2.34 ms, CPU 2.38 ms/frame).
+
+## Sunshine/Moonlight measurements, 2026-10-18
+
+These used the restored baseline library and existing plugin, HEVC 8-bit SDR, a Linux Moonlight client with hardware
+Vulkan decoding, and a windowed performance overlay. Each connection was stopped after about 37 seconds. The table
+uses the final roughly 22-second interval after client renderer resets; startup intervals had queue overflows,
+IDR requests and substantially worse drops/decode times. These are short tests, not whole-session stability results.
+
+| Content and requested setting | Incoming / rendered fps | Decode ms | Network loss / jitter drops | Video IP Mbit/s | Sunshine sampled %CPU |
+|---|---:|---:|---:|---:|---:|
+| Static desktop, 1080p60, 25 Mbit/s | 60.34 / 60.14 | 1.77 | 0% / 0.33% | 3.03 | 21.5 |
+| Static desktop, 1080p60, 10 Mbit/s | 60.35 / 60.15 | 1.92 | 0% / 0.33% | 2.89 | 21.3 |
+| Moving noise/gradient, 1080p60, 25 Mbit/s | 60.39 / 60.25 | 2.22 | 0% / 0.23% | 202.83 | 87.5 |
+
+Wire rates come from an eight-second server-side sample of video UDP packets, counting IP/UDP headers and FEC,
+excluding audio and Ethernet overhead, and dropping the partial first/last seconds. CPU is the mean of eight
+`ps %cpu` samples (100% represents one core), not a process-CPU-time delta. The moving-content app remained active
+through the measured stream. Lower requested bitrate is not a demonstrated quality or bandwidth improvement:
+the installed HEVC library logs that `AverageBitRate` is accepted but still uses constant QP 23. It substantially
+exceeds the requested rate on noisy content. The new HEVC feedback hook was not installed for these streams.
+
+Connections are unreliable. Some 720p60, 1080p30 and 1440p60 attempts, and the moving-content 1080p60/10 Mbit/s
+retry, received no video because encoder creation repeatedly failed with -12908. Verbose engine logs show CPU-map
+and usermode-map failures during bring-up; capture uploads also reported mapping failures. The responsible mapping
+and whether BAR1 pressure, resource lifetime or another error causes it remain unresolved. A successfully negotiated
+stream format alone is not evidence that any frames arrived. Fix connection reliability before treating these
+settings as supported presets.
 
 ## HEVC bitrate control
 
@@ -79,7 +134,23 @@ therefore uses the same inverse. HEVC sync-frame attachments use the same `NotSy
 
 The controller header passes its host simulations. A macOS test with fake VT functions checks feedback on both
 codecs, IDR handling, software-session pass-through and the opt-out. The plugin and probe compile on macOS.
-**Builds and callback-tested; hardware bitrate convergence and picture correctness with changing QP are pending.**
+
+The standalone probe installs the new hook in its own process before creating the Metal device; the installed
+plugin was not replaced. At 720p60, 360 frames per session, the mean after the first second was:
+
+| Target | Hook | Actual mean Mbit/s | Result |
+|---|---|---:|---|
+| 2 Mbit/s | off | 3.76 | Outside ±25%, expected negative control |
+| No target | on | 3.76 | Constant-QP control |
+| 2 Mbit/s | on | 2.05 | Pass |
+| 4 Mbit/s | on | 3.88 | Pass |
+| 8 Mbit/s | on | 7.91 | Pass |
+| 4 Mbit/s, nine sequential sessions | on | 3.88 each | All nine pass |
+
+Every session returned all 360 frames. H.264 with the same new hook also passed a 2 Mbit/s probe at 2.33 Mbit/s.
+These rates use encoded sample sizes and nominal video time, unlike the live IP measurements above. They check
+average bitrate and session-table reuse, not peak bursts, decoded-picture quality, or full-plugin integration.
+**VM-tested on Turing for synthetic bitrate tracking; decode correctness with changing QP remains pending.**
 
 ```bash
 clang -fobjc-arc -O1 -o vt_rc_hook_test tools/vt_rc_hook_test.m \
@@ -96,13 +167,9 @@ nine sequential sessions to exercise table replacement. A passing bitrate result
 
 ## Hardware validation still required
 
-When games and streaming are idle, back up the installed files and test each speed flag separately before the
-combined build. Run `tools/test_nvenc_hevc.py` for each: four sizes × 30 frames, mean and minimum Y PSNR ≥40 dB,
-parameter sets and L0-reference checks, low-latency creation and the property lookup. Then compare
-`BENCH_CODEC=hevc bench_nvenc 1920 1080 500 3` and 720p against the baseline in the same idle session.
-Restore the installed files on failures or timeouts. Run the equivalent H.264 regression after the plugin changes.
-
-Only after those pass, test Sunshine/Moonlight on varied game content with bitrate control. Watch for encoder
+The speed-flag A/B test and standalone synthetic bitrate tracking are complete for short 8-bit runs. Next verify
+HEVC decode correctness with changing QP, then run the equivalent H.264 regression after the plugin changes.
+Test Sunshine/Moonlight on varied game content with bitrate control. Watch for encoder
 creation failures, decode errors, drops and actual wire bitrate. The 10-bit paths are protected by fallback checks
 in emulation but remain unqualified on hardware. Other cards and long-running sessions are untested.
 

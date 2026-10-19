@@ -16,7 +16,7 @@ Only open problems are listed here. What has been fixed and measured is in [docs
 | A second H.264 encode session is refused | The encoder library allows one engine per process and keeps it reserved until the session object is released (`CFRelease`; `VTCompressionSessionInvalidate` alone is not enough). A second hardware session while the first is open fails with -12908 ("engine already in use in this process"). Upstream #206 reports the same on an RTX 2070 Super. | VM-tested on Turing |
 | The encoder needs about 33 MiB (1080p) to 81 MiB (4K) of BAR1 unless built with `--low-bar` | The library maps its working buffers through the BAR1 window and zero-fills them. On a card with a 256 MB BAR1 and a busy desktop the map can fail and the session fails with -12908 ("engine bring-up failed"). `make_nvenc_t2d.py --low-bar` releases the windows after the zero-fill (see docs/H264.md); the peak while a session opens is still about 17 MB at 1080p and 67 MB at 4K. | VM-tested on Turing |
 | Bitrate control is opt-in | Without `NVMTL_VT_RC=1` the encoder runs at constant QP 23 and ignores `AverageBitRate` (about 12 Mbit/s at 1080p on the synthetic clip, far more on noisy content). The controller holds a requested bitrate in short tests; it has not been run on varied content, at other resolutions or on other cards. | VM-tested on Turing |
-| HEVC is experimental and opt-in | Tiling plus disabling sign data hiding fixes the baseline (four sizes, 44.3–44.7 dB mean Y PSNR). Optional speed patches and HEVC bitrate-control wiring need GPU validation; see docs/HEVC.md. | baseline VM-tested on Turing; new optimization hardware checks pending |
+| HEVC is experimental and opt-in | Baseline and optional speed flags pass four-size quality checks (44.3–44.7 dB mean Y PSNR). Direct-row reaches 318 vs 301 fps at 1080p; short-zero shows no gain. Standalone HEVC feedback tracks 2/4/8 Mbit/s, but changing-QP decode quality and full-plugin streaming need validation. Installed HEVC ignores bitrate requests and sent 203 Mbit/s on moving noise at a requested 25 Mbit/s. See docs/HEVC.md. | 8-bit speed/quality and standalone bitrate tracking VM-tested on Turing |
 | No Man's Sky fails during initial loading/rendering | The native Intel build spends about 17 minutes loading shaders, then shows its fatal-error dialog. A captured signal-handler stack reaches address zero from `NVMTLArgumentEncoder setTexture:atIndex:` at its initial texture-retain call. Immediately beforehand the driver reports its 7472 MB heap budget exhausted, failed private-buffer allocations and texture spills to system RAM. The causal link between memory pressure and the null call is not yet established. See [docs/GAME-COMPATIBILITY.md](docs/GAME-COMPATIBILITY.md). | failure observed on Turing; stack/logs inspected; root cause unresolved |
 | The encoder is registered in every process that makes a Metal device | That includes `ScreensharingAgent` and `loginwindow`, so a bad encoder would show up in screen sharing too. | read from logs, VM |
 | Only one encoder library build is supported | `tools/make_nvenc_t2d.py` refuses any build other than the 2.2.0 `libnvenc_h264.dylib`; the 2.3.6 package ships the same bytes. | VM-tested on Turing |
@@ -39,20 +39,22 @@ Roughly in order of value per effort. "Hardware" means it needs a real card and 
 2. **Let a second session open.** Decide between a plugin-side workaround (release the first session when a second is
    requested), another binary patch, or documenting why not (the 2060 Super has one NVENC engine). Done when
    `tools/test_nvenc_h264.py --overlap-required` passes, or `docs/H264.md` says why it cannot. Needs: hardware.
-3. **Make the encoder cheaper on CPU.** Opt-in `--direct-row` and `--short-zero` already cut idle-VM CPU at 1080p from
-   about 2.3 ms to 2.2 (`--direct-row`), 2.1 (`--short-zero`) and 1.9 together (table in docs/H264.md); they do not separate CPU time from wall time. Suspect the
-   remaining cost is the CPU writing the tiled frame through the BAR1 mapping; a GPU copy would remove it. Done when
-   `tools/bench_nvenc_h264.py` shows CPU ms/frame well below wall ms/frame. Needs: hardware.
+3. **Make the encoder cheaper on CPU.** The latest installed 1080p baselines cost 2.38 ms CPU/frame for H.264
+   (421 fps) and 3.32 ms for HEVC (301 fps), close to their median callback latency. HEVC direct-row reduces this
+   to 3.15 ms (318 fps). Profile capture, conversion, tiled writes and waits before attempting a GPU copy/tiling
+   path. Opt-in `--direct-row` and `--short-zero` already cut H.264 idle-VM CPU from about 2.3 ms to 1.9 together
+   (table in docs/H264.md). Done when throughput improves and CPU ms/frame falls in a repeatable hardware comparison. Needs: hardware.
 4. **Validate bitrate control and decide its default.** Run `NVMTL_VT_RC=1` on real content (games, video, text) at
    720p to 4K and several client bitrates; record bitrate error and visible quality (PSNR with
    `tools/nvenc_psnr.m`). Done when the results are in `docs/H264.md` and the default is changed, or the reason it
    stays opt-in is written down. Needs: hardware.
 5. **A repeatable H.264 benchmark and a Linux comparison.** `tools/bench_nvenc_h264.py` measures this side; the
    comparison needs the same card under Linux (ffmpeg `h264_nvenc`). Done when both numbers are in `docs/H264.md`.
-6. **HEVC optimization and bitrate control.** The sign-hiding fix passes the baseline quality checks.
-   Validate each optional speed flag and the combination on the GPU, compare against the idle baseline, then
-   measure bitrate convergence and decode correctness with changing QP. Finish with a real game stream.
-   Needs: an idle GPU and a pause in the current stream; see docs/HEVC.md.
+6. **HEVC optimization and bitrate control.** All optional speed flags pass the four-size GPU quality regression.
+   Direct-row improves 1080p throughput about 6%; short-zero showed no gain and remains off. Standalone feedback
+   tracks 2/4/8 Mbit/s and passes nine sequential sessions. Next verify decode correctness with changing QP and
+   full-plugin integration. Investigate capture-time engine bring-up mapping failures, then finish with a real game
+   stream. Needs: an idle GPU; see docs/HEVC.md.
 7. **Ampere/Ada encode.** Upstream issue #65 measured the classic layout at 42-49 dB on an RTX 3070 Laptop with a
    similar change. The gate is Turing-only. Needs: a tester with the card.
 8. **Native encoder (research, architectural: ask first).** Today's encoder is upstream's closed binary with a patch.
