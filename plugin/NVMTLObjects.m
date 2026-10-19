@@ -2978,9 +2978,18 @@ static BOOL nvmtl_pixel_sampler_update(NSMutableDictionary *states, NSString *in
         nvmtl_vk_pt_note(&_cb->_c, (uint32_t)(hn.unsignedLongLongValue & 0xffffffffu));
     }
 }
+static NVMTLBuffer *nvmtl_bytes_ring(NVMTLCommandBuffer *cb, NSUInteger len, size_t *off);
+/* Metal clears a binding slot when the app passes nil; Vulkan still needs a descriptor, so a zero-filled
+   scratch buffer stands in (same approach as compute setBuffer:). */
+static void nvmtl_unbind_buffer(NVMTLCommandBuffer *cb, uint32_t set, uint32_t index, const char *what);
+static void nvmtl_unbind_texture(NVMTLCommandBuffer *cb, uint32_t set, uint32_t index);
 - (void)setVertexBuffer:(id<MTLBuffer>)b offset:(NSUInteger)off atIndex:(NSUInteger)i {
     NVMTLBuffer *nb = (NVMTLBuffer *)b;
-    if (!nb) { nvlog("setVertexBuffer: nil at index %lu", (unsigned long)i); return; }
+    if (!nb) {
+        if (i < NVMTL_NBUFAT) { _vbufAt[i] = nil; _vbufOff[i] = 0; }
+        nvmtl_unbind_buffer(_cb, NVMTL_SET_VERTEX, (uint32_t)i, "setVertexBuffer");
+        return;
+    }
     if (!_cb->_resources) _cb->_resources = [NVMTLResSet new];
     [_cb->_resources addObject:nb];
     if (i < NVMTL_NBUFAT) { _vbufAt[i] = nb; _vbufOff[i] = off; }
@@ -2995,14 +3004,17 @@ static BOOL nvmtl_pixel_sampler_update(NSMutableDictionary *states, NSString *in
     if (a && [(id)a isKindOfClass:[NVMTLAccelerationStructure class]] && a->_uid.buf && _cb) nvmtl_vk_bind_buffer(&_cb->_c, NVMTL_SET_FRAGMENT, 31, &a->_uid, 0); }
 - (void)setFragmentBuffer:(id<MTLBuffer>)b offset:(NSUInteger)off atIndex:(NSUInteger)i {
     NVMTLBuffer *nb = (NVMTLBuffer *)b;
-    if (!nb) { nvlog("setFragmentBuffer: nil at index %lu", (unsigned long)i); return; }
+    if (!nb) {
+        if (i < NVMTL_NBUFAT) { _fbufAt[i] = nil; _fbufOff[i] = 0; }
+        nvmtl_unbind_buffer(_cb, NVMTL_SET_FRAGMENT, (uint32_t)i, "setFragmentBuffer");
+        return;
+    }
     if (!_cb->_resources) _cb->_resources = [NVMTLResSet new];
     [_cb->_resources addObject:nb];
     if (i < NVMTL_NBUFAT) { _fbufAt[i] = nb; _fbufOff[i] = off; }
     nvtrace_floats("FB", (unsigned long)i, (unsigned long)off, nb->_b.map, 16);
     if (nvmtl_vk_bind_buffer(&_cb->_c, NVMTL_SET_FRAGMENT, (uint32_t)i, &nb->_b, off)) nvlog("setFragmentBuffer: bind FAILED");
 }
-static NVMTLBuffer *nvmtl_bytes_ring(NVMTLCommandBuffer *cb, NSUInteger len, size_t *off);
 - (void)nvmtlBindBytes:(const void *)bytes length:(NSUInteger)len atIndex:(NSUInteger)i set:(uint32_t)set {
     size_t roff = 0;
     NVMTLBuffer *nb = nvmtl_bytes_ring(_cb, len, &roff);
@@ -3025,7 +3037,7 @@ static NVMTLBuffer *nvmtl_bytes_ring(NVMTLCommandBuffer *cb, NSUInteger len, siz
 - (void)setFragmentBytes:(const void *)b length:(NSUInteger)l atIndex:(NSUInteger)i { [self nvmtlBindBytes:b length:l atIndex:i set:NVMTL_SET_FRAGMENT]; }
 - (void)setVertexTexture:(id<MTLTexture>)t atIndex:(NSUInteger)i {
     NVMTLTexture *nt = (NVMTLTexture *)t;
-    if (!nt) { nvlog("setVertexTexture: nil at index %lu", (unsigned long)i); return; }
+    if (!nt) { nvmtl_unbind_texture(_cb, NVMTL_SET_VERTEX, (uint32_t)i); return; }
     nvmtl_retain_resource(_cb, nt);
     nvmtl_surface_in_for_cb(_cb, nt);
     if (nt->_tbView) nvmtl_vk_bind_texel_view(&_cb->_c, NVMTL_SET_VERTEX, (uint32_t)i, nt->_tbView, nt->_tbStorage);
@@ -3058,7 +3070,7 @@ static NVMTLBuffer *nvmtl_bytes_ring(NVMTLCommandBuffer *cb, NSUInteger len, siz
 }
 - (void)setFragmentTexture:(id<MTLTexture>)t atIndex:(NSUInteger)i {
     NVMTLTexture *nt = (NVMTLTexture *)t;
-    if (!nt) { nvlog("setFragmentTexture: nil at index %lu", (unsigned long)i); return; }
+    if (!nt) { nvmtl_unbind_texture(_cb, NVMTL_SET_FRAGMENT, (uint32_t)i); return; }
     nvmtl_retain_resource(_cb, nt);
     nvmtl_surface_cpu_dump(nt->_parent ? nt->_parent : nt);
     nvmtl_surface_in_for_cb(_cb, nt);
@@ -3384,7 +3396,7 @@ static NVMTLBuffer *nvmtl_bytes_ring(NVMTLCommandBuffer *cb, NSUInteger len, siz
     [self setVertexBufferOffset:off atIndex:i]; [self nvmtlVertexStride:st atIndex:i]; }
 - (void)setVertexBuffers:(const id<MTLBuffer> __unsafe_unretained [])bufs offsets:(const NSUInteger *)offs
         attributeStrides:(const NSUInteger *)sts withRange:(NSRange)r {
-    for (NSUInteger k = 0; k < r.length; k++) if (bufs[k])
+    for (NSUInteger k = 0; k < r.length; k++)
         [self setVertexBuffer:bufs[k] offset:offs ? offs[k] : 0 attributeStride:sts ? sts[k] : MTLAttributeStrideStatic atIndex:r.location + k]; }
 - (void)setVertexBytes:(const void *)b length:(NSUInteger)l attributeStride:(NSUInteger)st atIndex:(NSUInteger)i {
     [self setVertexBytes:b length:l atIndex:i]; [self nvmtlVertexStride:st atIndex:i]; }
@@ -3395,16 +3407,16 @@ static NVMTLBuffer *nvmtl_bytes_ring(NVMTLCommandBuffer *cb, NSUInteger len, siz
         nvlog("setFragmentBufferOffset: nothing bound at fragment index %lu", (unsigned long)i);
 }
 - (void)setVertexBuffers:(const id<MTLBuffer> __unsafe_unretained [])bufs offsets:(const NSUInteger *)offs withRange:(NSRange)r {
-    for (NSUInteger k = 0; k < r.length; k++) if (bufs[k]) [self setVertexBuffer:bufs[k] offset:offs ? offs[k] : 0 atIndex:r.location + k];
+    for (NSUInteger k = 0; k < r.length; k++) [self setVertexBuffer:bufs[k] offset:offs ? offs[k] : 0 atIndex:r.location + k];
 }
 - (void)setFragmentBuffers:(const id<MTLBuffer> __unsafe_unretained [])bufs offsets:(const NSUInteger *)offs withRange:(NSRange)r {
-    for (NSUInteger k = 0; k < r.length; k++) if (bufs[k]) [self setFragmentBuffer:bufs[k] offset:offs ? offs[k] : 0 atIndex:r.location + k];
+    for (NSUInteger k = 0; k < r.length; k++) [self setFragmentBuffer:bufs[k] offset:offs ? offs[k] : 0 atIndex:r.location + k];
 }
 - (void)setVertexTextures:(const id<MTLTexture> __unsafe_unretained [])t withRange:(NSRange)r {
-    for (NSUInteger k = 0; k < r.length; k++) if (t[k]) [self setVertexTexture:t[k] atIndex:r.location + k];
+    for (NSUInteger k = 0; k < r.length; k++) [self setVertexTexture:t[k] atIndex:r.location + k];
 }
 - (void)setFragmentTextures:(const id<MTLTexture> __unsafe_unretained [])t withRange:(NSRange)r {
-    for (NSUInteger k = 0; k < r.length; k++) if (t[k]) [self setFragmentTexture:t[k] atIndex:r.location + k];
+    for (NSUInteger k = 0; k < r.length; k++) [self setFragmentTexture:t[k] atIndex:r.location + k];
 }
 - (void)setVertexSamplerStates:(const id<MTLSamplerState> __unsafe_unretained [])ss withRange:(NSRange)r {
     for (NSUInteger k = 0; k < r.length; k++) [self setVertexSamplerState:ss[k] atIndex:r.location + k];
@@ -4128,6 +4140,29 @@ static NVMTLBuffer *nvmtl_bytes_ring(NVMTLCommandBuffer *cb, NSUInteger len, siz
     cb->_e78RingOff = at + need; *off = at;
     return cb->_e78Ring;
 }
+static void nvmtl_unbind_buffer(NVMTLCommandBuffer *cb, uint32_t set, uint32_t index, const char *what)
+{
+    if (!cb) return;
+    size_t zoff = 0;
+    NVMTLBuffer *zb = nvmtl_bytes_ring(cb, 16, &zoff);
+    const BOOL zring = zb != nil;
+    if (!zring) {
+        zb = [NVMTLBuffer new];
+        if (nvmtl_vk_buffer_create(16, 1, &zb->_b)) { nvlog("%s: nil at %u - zero buffer create FAILED", what, index); return; }
+    }
+    if (zb->_b.map) memset((uint8_t *)zb->_b.map + zoff, 0, 16);
+    if (nvmtl_vk_bind_buffer(&cb->_c, set, index, &zb->_b, zoff)) nvlog("%s: nil at %u - bind FAILED", what, index);
+    if (!zring) {
+        if (!cb->_scratch) cb->_scratch = [NSMutableArray new];
+        [cb->_scratch addObject:zb];
+    }
+}
+static void nvmtl_unbind_texture(NVMTLCommandBuffer *cb, uint32_t set, uint32_t index)
+{
+    if (!cb) return;
+    nvmtl_vk_bind_texture_view(&cb->_c, set, index, NULL);
+    nvmtl_vk_bind_storage_view(&cb->_c, set, index, NULL);
+}
 
 #include "nvconv_lib.h"
 @interface NVMTLComputeCommandEncoder () { @public uint8_t _nvcKP[528]; uint32_t _nvcKPLen; uint8_t _nvcCP[272]; uint32_t _nvcCPLen; BOOL _nvcIn; } @end
@@ -4312,19 +4347,7 @@ static int nvmtl_zprobe_on(void);
     NVMTLBuffer *nb = (NVMTLBuffer *)b;
     if (!nb) {
         [_bufAt removeObjectForKey:@(i)];   // the binding table must not keep the previous resource
-        size_t zoff = 0;
-        NVMTLBuffer *zb = nvmtl_bytes_ring(_cb, 16, &zoff);
-        const BOOL zring = zb != nil;
-        if (!zring) {
-            zb = [NVMTLBuffer new];
-            if (nvmtl_vk_buffer_create(16, 1, &zb->_b)) { nvlog("compute setBuffer: nil at %lu - zero buffer create FAILED", (unsigned long)i); return; }
-        }
-        if (zb->_b.map) memset((uint8_t *)zb->_b.map + zoff, 0, 16);
-        if (nvmtl_vk_bind_buffer(&_cb->_c, NVMTL_SET_VERTEX, (uint32_t)i, &zb->_b, zoff)) nvlog("compute setBuffer: nil at %lu - bind FAILED", (unsigned long)i);
-        if (!zring) {
-            if (!_cb->_scratch) _cb->_scratch = [NSMutableArray new];
-            [_cb->_scratch addObject:zb];
-        }
+        nvmtl_unbind_buffer(_cb, NVMTL_SET_VERTEX, (uint32_t)i, "compute setBuffer");
         if (nvmtl_zprobe_on()) nvlog("ZENC setBuffer  idx %-3lu len 0        off 0  (nil -> zero-filled)", (unsigned long)i);
         return;
     }
@@ -4446,7 +4469,7 @@ static void nvmtl_zprobe_drain(void) {
         if (!_sassTextures) _sassTextures = [NSMutableDictionary new];
         if (nt) _sassTextures[@(i)] = nt; else [_sassTextures removeObjectForKey:@(i)];
     }
-    if (!nt) { nvlog("compute setTexture: nil at %lu", (unsigned long)i); return; }
+    if (!nt) { nvmtl_unbind_texture(_cb, NVMTL_SET_VERTEX, (uint32_t)i); return; }
     if (nt->_parent && nt->_baseLevel) nt->_parent->_mipsWritten = YES;
     nvmtl_zprobe_record(nt, _ps && _ps->_function ? _ps->_function->_fname.UTF8String : NULL, (unsigned)i, nt->_stex ? 1u : 0u);
     nvmtl_retain_resource(_cb, nt);
@@ -4562,10 +4585,10 @@ static void nvmtl_zprobe_drain(void) {
     [self setSamplerState:ss atIndex:i];
 }
 - (void)setBuffers:(const id<MTLBuffer> __unsafe_unretained [])b offsets:(const NSUInteger *)offs withRange:(NSRange)r {
-    for (NSUInteger k = 0; k < r.length; k++) if (b[k]) [self setBuffer:b[k] offset:offs ? offs[k] : 0 atIndex:r.location + k];
+    for (NSUInteger k = 0; k < r.length; k++) [self setBuffer:b[k] offset:offs ? offs[k] : 0 atIndex:r.location + k];
 }
 - (void)setTextures:(const id<MTLTexture> __unsafe_unretained [])t withRange:(NSRange)r {
-    for (NSUInteger k = 0; k < r.length; k++) if (t[k]) [self setTexture:t[k] atIndex:r.location + k];
+    for (NSUInteger k = 0; k < r.length; k++) [self setTexture:t[k] atIndex:r.location + k];
 }
 - (void)setSamplerStates:(const id<MTLSamplerState> __unsafe_unretained [])ss withRange:(NSRange)r {
     for (NSUInteger k = 0; k < r.length; k++) [self setSamplerState:ss[k] atIndex:r.location + k];
@@ -5354,11 +5377,11 @@ static int nvp_fast_off(void) {
 - (id<MTLDevice>)device { return gNVMTLMainDevice; }
 - (NSString *)label { return _label; }
 - (void)setLabel:(NSString *)l { _label = [l copy]; }
-- (void)setVertexBuffers:(const id<MTLBuffer> __unsafe_unretained [])b offsets:(const NSUInteger *)o withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) if (b[k]) [(id)self setVertexBuffer:b[k] offset:o ? o[k] : 0 atIndex:r.location + k]; }
-- (void)setVertexBuffers:(const id<MTLBuffer> __unsafe_unretained [])b offsets:(const NSUInteger *)o attributeStrides:(const NSUInteger *)s withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) if (b[k]) [(id)self setVertexBuffer:b[k] offset:o ? o[k] : 0 attributeStride:s ? s[k] : MTLAttributeStrideStatic atIndex:r.location + k]; }
-- (void)setFragmentBuffers:(const id<MTLBuffer> __unsafe_unretained [])b offsets:(const NSUInteger *)o withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) if (b[k]) [(id)self setFragmentBuffer:b[k] offset:o ? o[k] : 0 atIndex:r.location + k]; }
-- (void)setVertexTextures:(const id<MTLTexture> __unsafe_unretained [])t withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) if (t[k]) [(id)self setVertexTexture:t[k] atIndex:r.location + k]; }
-- (void)setFragmentTextures:(const id<MTLTexture> __unsafe_unretained [])t withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) if (t[k]) [(id)self setFragmentTexture:t[k] atIndex:r.location + k]; }
+- (void)setVertexBuffers:(const id<MTLBuffer> __unsafe_unretained [])b offsets:(const NSUInteger *)o withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) [(id)self setVertexBuffer:b[k] offset:o ? o[k] : 0 atIndex:r.location + k]; }
+- (void)setVertexBuffers:(const id<MTLBuffer> __unsafe_unretained [])b offsets:(const NSUInteger *)o attributeStrides:(const NSUInteger *)s withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) [(id)self setVertexBuffer:b[k] offset:o ? o[k] : 0 attributeStride:s ? s[k] : MTLAttributeStrideStatic atIndex:r.location + k]; }
+- (void)setFragmentBuffers:(const id<MTLBuffer> __unsafe_unretained [])b offsets:(const NSUInteger *)o withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) [(id)self setFragmentBuffer:b[k] offset:o ? o[k] : 0 atIndex:r.location + k]; }
+- (void)setVertexTextures:(const id<MTLTexture> __unsafe_unretained [])t withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) [(id)self setVertexTexture:t[k] atIndex:r.location + k]; }
+- (void)setFragmentTextures:(const id<MTLTexture> __unsafe_unretained [])t withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) [(id)self setFragmentTexture:t[k] atIndex:r.location + k]; }
 - (void)setVertexSamplerStates:(const id<MTLSamplerState> __unsafe_unretained [])s withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) [(id)self setVertexSamplerState:s[k] atIndex:r.location + k]; }
 - (void)setFragmentSamplerStates:(const id<MTLSamplerState> __unsafe_unretained [])s withRange:(NSRange)r { for (NSUInteger k = 0; k < r.length; k++) [(id)self setFragmentSamplerState:s[k] atIndex:r.location + k]; }
 - (void)useResources:(const id<MTLResource> __unsafe_unretained [])r count:(NSUInteger)n usage:(MTLResourceUsage)u { for (NSUInteger i = 0; i < n; i++) [(id)self useResource:r[i] usage:u]; }
