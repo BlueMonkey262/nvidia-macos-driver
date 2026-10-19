@@ -14,6 +14,9 @@ Nothing here has been run on other cards, and macOS 26 is untested.
 |---|---|---|
 | Hardware H.264 encode on Turing | `plugin/NVMTLDevice.m` (gate), `tools/make_nvenc_t2d.py` | see [docs/H264.md](docs/H264.md) |
 | H.264 encode regression test | `tools/nvenc_psnr.m`, `tools/test_nvenc_h264.py` | see [docs/H264.md](docs/H264.md) |
+| Metal API coverage map and per-method ratings | `tools/metal_coverage.*`, `tools/metal-ratings.json`, `docs/metal-coverage/` | see [the map](docs/metal-coverage/README.md) |
+| Metal behaviour fixes with regression tests (residency use-after-free, LOD-clamp sampler lifetime, kernel times, async compile handlers, nil bindings) | `plugin/NVMTLObjects.m`, `plugin/NVMTLDevice.m`, `tools/test_metal_*.m` | VM-tested on Turing |
+| Factorio initialises at default settings: keep 16 command pools and address pages, not 256, under the 4096 NVRM clients per process limit (`NVMTL_POOL_KEEP`) | `plugin/nvmtl_vk.c` | VM-tested on Turing, initialisation only |
 | Contribution policy: AI-assisted code is welcome | `AGENTS.md`, `CONTRIBUTING.md`, templates | n/a |
 
 ## VM notes
