@@ -758,6 +758,7 @@ static BOOL nvmtl_desc_fbo(MTLTextureDescriptor *d) {
     t->_ropt = (MTLResourceOptions)d.cpuCacheMode | ((MTLResourceOptions)d.hazardTrackingMode << MTLResourceHazardTrackingModeShift)
              | ((MTLResourceOptions)d.storageMode << MTLResourceStorageModeShift);
     t->_fbo = nvmtl_desc_fbo(d);
+    t->_gpuOptimizedOff = !d.allowGPUOptimizedContents;
     t->_fmt = d.pixelFormat;
     uint32_t dvk = 0, dasp = 0;
     if (nvmtl_depthfmt(d.pixelFormat, &dvk, &dasp) == 0) {
@@ -880,6 +881,7 @@ static char nvmtl_surface_cache_key;
     t->_ropt = (MTLResourceOptions)d.cpuCacheMode | ((MTLResourceOptions)d.hazardTrackingMode << MTLResourceHazardTrackingModeShift)
              | ((MTLResourceOptions)d.storageMode << MTLResourceStorageModeShift);
     t->_fbo = nvmtl_desc_fbo(d);
+    t->_gpuOptimizedOff = !d.allowGPUOptimizedContents;
     uint32_t vkf = 0, bpp = 0; int a8 = 0;
     if (nvmtl_pixfmt(d.pixelFormat, &vkf, &bpp, &a8)) return nil;
     int wantStex = (d.usage & MTLTextureUsageShaderWrite) != 0;
@@ -893,6 +895,7 @@ static char nvmtl_surface_cache_key;
         NVMTLTexture *alias = (NVMTLTexture *)[backing newTextureViewWithPixelFormat:d.pixelFormat];
         if (alias) {
             alias->_viewParent = nil; alias->_usage = d.usage; alias->_ropt = t->_ropt; alias->_fbo = t->_fbo;
+            alias->_gpuOptimizedOff = t->_gpuOptimizedOff;
             nvmtl_texture_desc_swizzle(alias, d);
             return alias;
         }
@@ -1911,6 +1914,8 @@ static void nvmtl_log_compute_descriptor(MTLComputePipelineDescriptor *d) {
     NVMTLIndirectCommandBuffer *icb = [NVMTLIndirectCommandBuffer new];
     icb->_dev = self; icb->_cmds = [NSMutableArray arrayWithCapacity:n];
     icb->_opts = o;
+    // CPU-side slots; report a non-zero allocatedSize proportional to capacity (Metal's resource size).
+    icb->_allocatedSize = n * 512;
     for (NSUInteger i = 0; i < n; i++) [icb->_cmds addObject:[NVMTLIndirectCommand new]];
     nvlog("newIndirectCommandBufferWithDescriptor: %lu slots -> %p", (unsigned long)n, (__bridge void *)icb);
     return icb;

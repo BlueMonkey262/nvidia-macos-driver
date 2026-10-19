@@ -115,6 +115,7 @@ extern id gNVMTLMainDevice;
   NSError *_cbError;
   NSMutableDictionary *_userDictionary;
   @public nvk_cmdbuf _c; NVMTLCommandQueue *_queue; BOOL _committed, _commitMarking; BOOL _capacityHeld; MTLCommandBufferStatus _cbstatus;
+  BOOL _retainedReferences; MTLCommandBufferErrorOption _errorOptions;
   NVMTLTexture *_present;
   NSMutableArray *_presentations;
   NSMutableArray *_handlers;
@@ -176,10 +177,11 @@ extern id gNVMTLMainDevice;
   MTLTriangleFillMode _fill; BOOL _hasFill;
   MTLDepthClipMode _clip; BOOL _hasClip;
   id _ds; float _bias, _slope, _clamp; BOOL _hasBias;
-  id _cps; NSMutableArray *_kbufs; MTLSize _grid, _tg; BOOL _isCompute;
+  id _cps; NSMutableArray *_kbufs; MTLSize _grid, _tg, _threads; BOOL _isCompute, _exactThreads;
 } @end
 @interface NVMTLIndirectCommandBuffer : NSObject <MTLIndirectCommandBuffer> {
   @public NSMutableArray<NVMTLIndirectCommand *> *_cmds; id<MTLDevice> _dev; NSString *_label;
+  NSUInteger _allocatedSize;
 } @end
 @interface NVMTLComputeCommandEncoder : NSObject <MTLComputeCommandEncoder> {
   @public NVMTLCommandBuffer *_cb; NVMTLComputePipelineState *_ps; NSMutableArray *_scratch; NSMutableDictionary *_samplers;
@@ -240,7 +242,7 @@ id<MTLCounterSet> nvmtl_timestamp_counter_set(void);
   uint64_t _useEp;
   BOOL _texSeen;
 } @end
-@interface NVMTLTexture () { @public NSString *_label; MTLResourceOptions _ropt; BOOL _shareable; BOOL _fbo;
+@interface NVMTLTexture () { @public NSString *_label; MTLResourceOptions _ropt; BOOL _shareable; BOOL _fbo; BOOL _gpuOptimizedOff; /* inverted: Metal default is YES */
   MTLTextureSwizzleChannels _swz; BOOL _hasSwz; void *_swzView;
   void *_tbView, *_tbAlias; BOOL _tbStorage;
   int _resRefs;

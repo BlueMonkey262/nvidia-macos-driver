@@ -816,7 +816,7 @@ static NVMTLTexture *nvmtl_texbuf_make(NVMTLBuffer *b, MTLTextureDescriptor *d, 
     t->_fmt = d.pixelFormat; t->_mips = 1;
     t->_stex = t->_i.storage != 0;
     t->_ropt |= (MTLResourceOptions)d.storageMode << MTLResourceStorageModeShift;
-    t->_usage = d.usage;
+    t->_usage = d.usage; t->_gpuOptimizedOff = !d.allowGPUOptimizedContents;
     _texSeen = YES;
     t->_backBuf = self; t->_backOff = offset; t->_backBPR = bpr;
     t->_bparkable = !noRecycle; memcpy(t->_pkey, bkey, sizeof bkey);
@@ -873,7 +873,11 @@ void nvmtl_vk_buffer_retire(nvk_buffer *b);
     if (_hostDealloc) { void (^d)(void *, NSUInteger) = _hostDealloc; _hostDealloc = nil;
                         d(_hostPtr ?: _b.map, (NSUInteger)(_hostLen ?: _b.size)); } }
 - (MTLStorageMode)storageMode { return _storage; }
-- (void *)contents { nvmtl_buf_settle(self); return _shadow.map ? _shadow.map : (_hostPtr ? _hostPtr : _b.map); }
+- (void *)contents {
+    if (_storage == MTLStorageModePrivate) return NULL;
+    nvmtl_buf_settle(self);
+    return _shadow.map ? _shadow.map : (_hostPtr ? _hostPtr : _b.map);
+}
 - (id<MTLHeap>)heap { return _heap ?: _subHeap; }
 - (NSUInteger)heapOffset { return _heapOffset; }
 - (NSUInteger)length { return _b.size; }
@@ -1306,7 +1310,13 @@ static void nvmtl_surface_remark_later(NVMTLTexture *r, uint32_t seed) {
 - (NSUInteger)depth  { nvk_image *i = [self nvi]; return i->mtl_type == 7 ? MAX(1u, i->layers >> _baseLevel) : 1; }
 - (NSUInteger)mipmapLevelCount { if (_parent) return _mips ? _mips : 1; uint32_t m = [self nvi]->mips; return m ? m : 1; }
 - (id<MTLTexture>)parentTexture { return _viewParent; }
-- (id<MTLResource>)rootResource { return _viewParent ? (id<MTLResource>)_viewParent : (id<MTLResource>)_backBuf; }
+- (id<MTLResource>)rootResource {
+    // Storage owner: buffer-backed textures report the buffer; texture views report the root texture
+    // (or its buffer). Immediate _viewParent is parentTexture, not rootResource.
+    NVMTLTexture *root = _parent ? _parent : self;
+    if (root->_backBuf) return (id<MTLResource>)root->_backBuf;
+    return _parent ? (id<MTLResource>)_parent : nil;
+}
 - (kern_return_t)setOwnerWithIdentity:(task_id_token_t)t { return nvmtl_owner_check(t); }
 - (NSUInteger)parentRelativeLevel { return _relativeLevel; }
 - (NSUInteger)parentRelativeSlice { return _relativeSlice; }
@@ -1314,7 +1324,7 @@ static void nvmtl_surface_remark_later(NVMTLTexture *r, uint32_t seed) {
 - (NSUInteger)sampleCount { return [self nvi]->samples > 1 ? [self nvi]->samples : 1; }
 - (MTLTextureType)textureType { return (MTLTextureType)(_parent ? _viewType : [self nvi]->mtl_type); }
 - (MTLPixelFormat)pixelFormat { return _fmt ? _fmt : MTLPixelFormatRGBA8Unorm; }
-- (IOSurfaceRef)iosurface { return _shareable ? NULL : _surf; }
+- (IOSurfaceRef)iosurface { return _surf; }
 - (NSUInteger)iosurfacePlane { return _plane; }
 - (MTLStorageMode)storageMode { NVMTLTexture *r = _parent ? _parent : self; if (r->_shareable) return MTLStorageModePrivate;
     NVMTLHeap *hp = r->_heap ? r->_heap : r->_subHeap; return hp ? hp->_storage : (MTLStorageMode)((r->_ropt >> MTLResourceStorageModeShift) & 0xF); }
@@ -1342,7 +1352,7 @@ static void nvmtl_surface_remark_later(NVMTLTexture *r, uint32_t seed) {
 - (MTLTextureSwizzleChannels)swizzle { return _hasSwz ? _swz : MTLTextureSwizzleChannelsMake(MTLTextureSwizzleRed, MTLTextureSwizzleGreen, MTLTextureSwizzleBlue, MTLTextureSwizzleAlpha); }
 - (BOOL)isSparse { NVMTLTexture *r = _parent ? _parent : self; return (r->_heap && r->_heap->_type == MTLHeapTypeSparse) || (r->_subHeap && r->_subHeap->_type == MTLHeapTypeSparse); }
 - (uint32_t)swizzleKey { MTLTextureSwizzleChannels c = [self swizzle]; return (uint32_t)c.red | (uint32_t)c.green << 8 | (uint32_t)c.blue << 16 | (uint32_t)c.alpha << 24; }
-- (BOOL)allowGPUOptimizedContents { return YES; }
+- (BOOL)allowGPUOptimizedContents { return !_gpuOptimizedOff; }
 - (MTLTextureCompressionType)compressionType { return MTLTextureCompressionTypeLossless; }
 - (NSString *)label { return _label; }
 - (void)setLabel:(NSString *)l { _label = [l copy]; }
@@ -1483,6 +1493,7 @@ static NVMTLTexture *nvmtl_texbuf_view(NVMTLTexture *t, MTLPixelFormat f) {
     NVMTLTexture *v = [NVMTLTexture new];
     { NVMTLTexture *vp_ = _parent ? _parent : self; __atomic_fetch_add(&vp_->_nviews, 1, __ATOMIC_ACQ_REL); }  v->_parent = _parent ? _parent : self; v->_usage = [self usage];
     v->_q = _q; v->_fmt = f; v->_surf = _surf; v->_plane = _plane;
+    v->_gpuOptimizedOff = _gpuOptimizedOff;
     v->_mips = (uint32_t)levels.length;
     v->_viewParent = self; v->_relativeLevel = (uint32_t)levels.location;
     v->_viewType = (uint32_t)self.textureType;
@@ -1531,6 +1542,7 @@ static uint32_t nvmtl_tex_attach_vkfmt(NVMTLTexture *t, int *a8) {
     if (((tt == MTLTextureType1D || tt == MTLTextureType1DArray) && [self nvi]->mtl_type != (uint32_t)tt) || (tt == MTLTextureType2DMultisample && ([self nvi]->mtl_type != 4 && [self nvi]->mtl_type != 8)) || (tt == MTLTextureType2DMultisampleArray && [self nvi]->mtl_type != 8) || (([self nvi]->mtl_type == 4 || [self nvi]->mtl_type == 8) && tt != MTLTextureType2DMultisample && tt != MTLTextureType2DMultisampleArray) || (tt == MTLTextureType3D && [self nvi]->mtl_type != 7)) { nvlog("newTextureView: textureType %lu of a %u-typed texture — not carried", (unsigned long)tt, [self nvi]->mtl_type); return nil; }
     NVMTLTexture *v = [NVMTLTexture new];
     { NVMTLTexture *vp_ = _parent ? _parent : self; __atomic_fetch_add(&vp_->_nviews, 1, __ATOMIC_ACQ_REL); }  v->_parent = _parent ? _parent : self; v->_usage = [self usage];  v->_q = _q; v->_fmt = f; v->_surf = _surf; v->_plane = _plane; v->_mips = (uint32_t)levels.length;
+    v->_gpuOptimizedOff = _gpuOptimizedOff;
     v->_viewParent = self; v->_relativeLevel = (uint32_t)levels.location; v->_relativeSlice = (uint32_t)slices.location;
     v->_viewType = (uint32_t)tt; v->_viewSlices = (uint32_t)slices.length;
     v->_baseSlice = _baseSlice + (uint32_t)slices.location; v->_baseLevel = _baseLevel + (uint32_t)levels.location;
@@ -3080,10 +3092,11 @@ static void nvmtl_unbind_texture(NVMTLCommandBuffer *cb, uint32_t set, uint32_t 
 }
 - (void)setVertexAccelerationStructure:(id<MTLAccelerationStructure>)as atBufferIndex:(NSUInteger)i { [self setVertexBuffer:(id<MTLBuffer>)as offset:0 atIndex:i];
     NVMTLAccelerationStructure *a = (NVMTLAccelerationStructure *)as;
-    if (a && [(id)a isKindOfClass:[NVMTLAccelerationStructure class]] && a->_uid.buf && _cb) nvmtl_vk_bind_buffer(&_cb->_c, NVMTL_SET_VERTEX, 31, &a->_uid, 0); }
+    // Slot 31 holds the user-instance-id side table; do not clobber an AS bound at 31.
+    if (a && [(id)a isKindOfClass:[NVMTLAccelerationStructure class]] && a->_uid.buf && _cb && i != 31) nvmtl_vk_bind_buffer(&_cb->_c, NVMTL_SET_VERTEX, 31, &a->_uid, 0); }
 - (void)setFragmentAccelerationStructure:(id<MTLAccelerationStructure>)as atBufferIndex:(NSUInteger)i { [self setFragmentBuffer:(id<MTLBuffer>)as offset:0 atIndex:i];
     NVMTLAccelerationStructure *a = (NVMTLAccelerationStructure *)as;
-    if (a && [(id)a isKindOfClass:[NVMTLAccelerationStructure class]] && a->_uid.buf && _cb) nvmtl_vk_bind_buffer(&_cb->_c, NVMTL_SET_FRAGMENT, 31, &a->_uid, 0); }
+    if (a && [(id)a isKindOfClass:[NVMTLAccelerationStructure class]] && a->_uid.buf && _cb && i != 31) nvmtl_vk_bind_buffer(&_cb->_c, NVMTL_SET_FRAGMENT, 31, &a->_uid, 0); }
 - (void)setFragmentBuffer:(id<MTLBuffer>)b offset:(NSUInteger)off atIndex:(NSUInteger)i {
     NVMTLBuffer *nb = (NVMTLBuffer *)b;
     if (!nb) {
@@ -3840,7 +3853,7 @@ void nvmtl_heap_back(NVMTLHeap *h, NSUInteger size, int shared) {
     if (!d) return nil;
     NVMTLTexture *t = [NVMTLTexture new];
     t->_fmt = d.pixelFormat; t->_mips = (uint32_t)(d.mipmapLevelCount ? d.mipmapLevelCount : 1);
-    t->_usage = d.usage;
+    t->_usage = d.usage; t->_gpuOptimizedOff = !d.allowGPUOptimizedContents;
     uint32_t dvk = 0, dasp = 0;
     if (nvmtl_depthfmt_public(d.pixelFormat, &dvk, &dasp) == 0) {
         if (nvmtl_vk_depth_create_ex_placed((uint32_t)d.width, (uint32_t)d.height, dvk, dasp, &_hm, off, &t->_i)) { nvlog("heap depth texture FAILED (format %lu offset %lu)", (unsigned long)d.pixelFormat, (unsigned long)off); return nil; }
@@ -3958,7 +3971,7 @@ void nvmtl_heap_back(NVMTLHeap *h, NSUInteger size, int shared) {
     }
     t->_ropt = (MTLResourceOptions)d.cpuCacheMode | ((MTLResourceOptions)d.hazardTrackingMode << MTLResourceHazardTrackingModeShift)
              | ((MTLResourceOptions)d.storageMode << MTLResourceStorageModeShift);
-    t->_fmt = d.pixelFormat; t->_mips = mips; t->_usage = d.usage;
+    t->_fmt = d.pixelFormat; t->_mips = mips; t->_usage = d.usage; t->_gpuOptimizedOff = !d.allowGPUOptimizedContents;
     t->_q = nvmtl_device_queue(); t->_stex = t->_i.storage != 0;
     t->_subHeap = self; t->_subCharge = len; t->_subPlaced = YES; t->_heapOffset = off;
     t->_parkable = !noRecycle; memcpy(t->_pkey, key, sizeof key); t->_pkLen = len;
@@ -4064,13 +4077,14 @@ static NSUInteger nvmtl_compute_maxt(void) { static NSUInteger v; if (!v) v = nv
     if (b) [_kbufs addObject:@[b, @(o), @(i)]];
 }
 - (void)concurrentDispatchThreadgroups:(MTLSize)grid threadsPerThreadgroup:(MTLSize)tg {
-    _grid = grid; _tg = tg; _isCompute = YES; _armed = YES;
+    _grid = grid; _tg = tg; _threads = (MTLSize){0, 0, 0}; _exactThreads = NO; _isCompute = YES; _armed = YES;
 }
 - (void)concurrentDispatchThreads:(MTLSize)threads threadsPerThreadgroup:(MTLSize)tg {
-    MTLSize g = { (threads.width + tg.width - 1) / tg.width,
-                  (threads.height + tg.height - 1) / tg.height,
-                  (threads.depth + tg.depth - 1) / tg.depth };
-    [self concurrentDispatchThreadgroups:g threadsPerThreadgroup:tg];
+    // Metal dispatches the exact thread count; do not round up to whole threadgroups here.
+    _threads = threads; _tg = tg; _exactThreads = YES; _isCompute = YES; _armed = YES;
+    _grid = (MTLSize){ (threads.width + tg.width - 1) / tg.width,
+                       (threads.height + tg.height - 1) / tg.height,
+                       (threads.depth + tg.depth - 1) / tg.depth };
 }
 - (void)setBarrier {}
 - (void)clearBarrier {}
@@ -4091,12 +4105,13 @@ static NSUInteger nvmtl_compute_maxt(void) { static NSUInteger v; if (!v) v = nv
     _ibuf = o->_ibuf; _ioff = o->_ioff; _itype = o->_itype; _baseVertex = o->_baseVertex; _indexed = o->_indexed; _armed = o->_armed;
     _cull = o->_cull; _hasCull = o->_hasCull; _winding = o->_winding; _hasWinding = o->_hasWinding; _fill = o->_fill; _hasFill = o->_hasFill;
     _clip = o->_clip; _hasClip = o->_hasClip; _ds = o->_ds; _bias = o->_bias; _slope = o->_slope; _clamp = o->_clamp; _hasBias = o->_hasBias;
-    _cps = o->_cps; _kbufs = [o->_kbufs mutableCopy]; _grid = o->_grid; _tg = o->_tg; _isCompute = o->_isCompute;
+    _cps = o->_cps; _kbufs = [o->_kbufs mutableCopy]; _grid = o->_grid; _tg = o->_tg;
+    _threads = o->_threads; _exactThreads = o->_exactThreads; _isCompute = o->_isCompute;
 }
 - (void)reset {
     _ps = nil; [_vbufs removeAllObjects]; [_fbufs removeAllObjects]; _ibuf = nil; _armed = NO;
     _hasCull = _hasWinding = _hasFill = _hasClip = _hasBias = NO; _ds = nil;
-    _cps = nil; [_kbufs removeAllObjects]; _isCompute = NO;
+    _cps = nil; [_kbufs removeAllObjects]; _isCompute = NO; _exactThreads = NO;
 }
 @end
 
@@ -4115,7 +4130,7 @@ static NSUInteger nvmtl_compute_maxt(void) { static NSUInteger v; if (!v) v = nv
 - (NSUInteger)heapOffset { return 0; }
 - (BOOL)isAliasable { return NO; }
 - (void)makeAliasable {}
-- (NSUInteger)allocatedSize { return 0; }
+- (NSUInteger)allocatedSize { return _allocatedSize; }
 - (kern_return_t)setOwnerWithIdentity:(task_id_token_t)t { return nvmtl_owner_check(t); }
 - (id<MTLIndirectComputeCommand>)indirectComputeCommandAtIndex:(NSUInteger)i {
     if (i >= _cmds.count) { nvlog("indirectComputeCommandAtIndex:%lu — this buffer holds %lu", (unsigned long)i, (unsigned long)_cmds.count); return nil; }
@@ -4469,7 +4484,8 @@ static int nvmtl_zprobe_on(void);
 - (void)setAccelerationStructure:(id<MTLAccelerationStructure>)as atBufferIndex:(NSUInteger)i {
     [self setBuffer:(id<MTLBuffer>)as offset:0 atIndex:i];
     NVMTLAccelerationStructure *a = (NVMTLAccelerationStructure *)as;
-    if (a && [(id)a isKindOfClass:[NVMTLAccelerationStructure class]] && a->_uid.buf && _cb)
+    // Slot 31 holds the user-instance-id side table; do not clobber an AS bound at 31.
+    if (a && [(id)a isKindOfClass:[NVMTLAccelerationStructure class]] && a->_uid.buf && _cb && i != 31)
         nvmtl_vk_bind_buffer(&_cb->_c, NVMTL_SET_VERTEX, 31, &a->_uid, 0);
 }
 - (void)setBytes:(const void *)bytes length:(NSUInteger)len atIndex:(NSUInteger)i {
@@ -4657,7 +4673,10 @@ static void nvmtl_zprobe_drain(void) {
         if (!c->_armed || !c->_isCompute) continue;
         if (c->_cps) [self setComputePipelineState:c->_cps];
         for (NSArray *e in c->_kbufs) [self setBuffer:e[0] offset:[e[1] unsignedLongValue] atIndex:[e[2] unsignedLongValue]];
-        [self dispatchThreadgroups:c->_grid threadsPerThreadgroup:c->_tg];
+        if (c->_exactThreads)
+            [self dispatchThreads:c->_threads threadsPerThreadgroup:c->_tg];
+        else
+            [self dispatchThreadgroups:c->_grid threadsPerThreadgroup:c->_tg];
         n++;
     }
     nvlog("compute executeCommandsInBuffer: replayed %lu of %lu slot(s)", (unsigned long)n, (unsigned long)r.length);
@@ -4863,11 +4882,14 @@ static NSUInteger nvmtl_texture_slice_count(NVMTLTexture *t) {
 }
 - (void)optimizeIndirectCommandBuffer:(id<MTLIndirectCommandBuffer>)icb withRange:(NSRange)r {}
 - (void)copyFromTexture:(id<MTLTexture>)src toTexture:(id<MTLTexture>)dst {
-    NVMTLTexture *s = (NVMTLTexture *)src;
-    if (!s) { nvlog("blit copyFromTexture:toTexture: nil"); return; }
-    [self copyFromTexture:src sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0)
-               sourceSize:MTLSizeMake(s.width, s.height, s.textureType == MTLTextureType3D ? s.depth : 1) toTexture:dst
-         destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
+    NVMTLTexture *s = (NVMTLTexture *)src, *d = (NVMTLTexture *)dst;
+    if (!s || !d) { nvlog("blit copyFromTexture:toTexture: nil"); return; }
+    // Apple copies every matching slice and mip level at full subresource size.
+    NSUInteger slices = MIN(nvmtl_texture_slice_count(s), nvmtl_texture_slice_count(d));
+    NSUInteger levels = MIN(s.mipmapLevelCount, d.mipmapLevelCount);
+    if (!slices || !levels) { nvlog("blit copyFromTexture:toTexture: no overlapping slices/levels"); return; }
+    [self copyFromTexture:src sourceSlice:0 sourceLevel:0 toTexture:dst destinationSlice:0 destinationLevel:0
+               sliceCount:slices levelCount:levels];
 }
 - (void)copyFromBuffer:(id<MTLBuffer>)src sourceOffset:(NSUInteger)so sourceBytesPerRow:(NSUInteger)row
    sourceBytesPerImage:(NSUInteger)img sourceSize:(MTLSize)size toTexture:(id<MTLTexture>)dst
@@ -4999,8 +5021,8 @@ destinationBytesPerImage:(NSUInteger)img options:(MTLBlitOption)opt {
 - (void)nvmtlRecordEncodingError:(NSError *)error { if (!_cbError) _cbError = error; }
 - (void)setProtectionOptions:(unsigned long long)o { if (o) { static int said; if (!said++) nvlog("setProtectionOptions: 0x%llx asked - no protected-content path; protectionOptions stays 0 (said once)", o); } }
 - (unsigned long long)globalTraceObjectID { return nvmtl_global_trace_id(self); }
-- (BOOL)retainedReferences { return YES; }
-- (MTLCommandBufferErrorOption)errorOptions { return MTLCommandBufferErrorOptionNone; }
+- (BOOL)retainedReferences { return _retainedReferences; }
+- (MTLCommandBufferErrorOption)errorOptions { return _errorOptions; }
 - (id<MTLLogContainer>)logs { return nil; }
 - (unsigned long long)protectionOptions { return 0; }
 - (instancetype)init {
@@ -5010,6 +5032,8 @@ destinationBytesPerImage:(NSUInteger)img options:(MTLBlitOption)opt {
         // their own set, and the set that lost was freed with the resources only it held (and under the other
         // thread's addObject:).
         _resources = [NVMTLResSet new];
+        _retainedReferences = YES;
+        _errorOptions = MTLCommandBufferErrorOptionNone;
         _callbackGroup = dispatch_group_create(); _scheduledGroup = dispatch_group_create();
     }
     return self;
@@ -5213,8 +5237,16 @@ destinationBytesPerImage:(NSUInteger)img options:(MTLBlitOption)opt {
     CFTimeInterval value = _executionDone && !_cbError ? _gpuEnd : 0;
     [_completionCondition unlock]; return value;
 }
-- (CFTimeInterval)kernelStartTime { return _legacyKernelStart; }
-- (CFTimeInterval)kernelEndTime { return _legacyKernelEnd; }
+- (CFTimeInterval)kernelStartTime {
+    [_completionCondition lock];
+    CFTimeInterval value = _executionDone && !_cbError ? _legacyKernelStart : 0;
+    [_completionCondition unlock]; return value;
+}
+- (CFTimeInterval)kernelEndTime {
+    [_completionCondition lock];
+    CFTimeInterval value = _executionDone && !_cbError ? _legacyKernelEnd : 0;
+    [_completionCondition unlock]; return value;
+}
 - (void)waitUntilCompleted {
     _nWait++; [_completionCondition lock];
     while (!_completionReady) [_completionCondition wait];
@@ -5276,8 +5308,20 @@ destinationBytesPerImage:(NSUInteger)img options:(MTLBlitOption)opt {
     }
     return cb;
 }
-- (id<MTLCommandBuffer>)commandBufferWithUnretainedReferences { return [self commandBuffer]; }
-- (id<MTLCommandBuffer>)commandBufferWithDescriptor:(MTLCommandBufferDescriptor *)d { return [self commandBuffer]; }
+- (id<MTLCommandBuffer>)commandBufferWithUnretainedReferences {
+    NVMTLCommandBuffer *cb = (NVMTLCommandBuffer *)[self commandBuffer];
+    // Report unretained like Apple; keep holding resources until completion so VRAM stays valid.
+    if (cb) cb->_retainedReferences = NO;
+    return cb;
+}
+- (id<MTLCommandBuffer>)commandBufferWithDescriptor:(MTLCommandBufferDescriptor *)d {
+    NVMTLCommandBuffer *cb = (NVMTLCommandBuffer *)[self commandBuffer];
+    if (cb && d) {
+        cb->_retainedReferences = d.retainedReferences;
+        cb->_errorOptions = d.errorOptions;
+    }
+    return cb;
+}
 - (void)insertDebugCaptureBoundary {}
 - (void)setLabel:(NSString *)l { _label = [l copy]; }
 - (NSString *)label { return _label; }
@@ -5294,8 +5338,10 @@ destinationBytesPerImage:(NSUInteger)img options:(MTLBlitOption)opt {
 - (uint64_t)allocatedSize { uint64_t s = 0; for (id<MTLAllocation> a in _allocs) s += [a allocatedSize]; return s; }
 - (void)requestResidency {}
 - (void)endResidency {}
-- (void)addAllocation:(id<MTLAllocation>)a { if (a) [_allocs addObject:a]; }
-- (void)addAllocations:(const id<MTLAllocation> __unsafe_unretained [])a count:(NSUInteger)n { for (NSUInteger i = 0; i < n; i++) if (a[i]) [_allocs addObject:a[i]]; }
+- (void)addAllocation:(id<MTLAllocation>)a { if (a && ![_allocs containsObject:a]) [_allocs addObject:a]; }
+- (void)addAllocations:(const id<MTLAllocation> __unsafe_unretained [])a count:(NSUInteger)n {
+    for (NSUInteger i = 0; i < n; i++) if (a[i] && ![_allocs containsObject:a[i]]) [_allocs addObject:a[i]];
+}
 - (void)removeAllocation:(id<MTLAllocation>)a { if (a) [_allocs removeObject:a]; }
 - (void)removeAllocations:(const id<MTLAllocation> __unsafe_unretained [])a count:(NSUInteger)n { for (NSUInteger i = 0; i < n; i++) if (a[i]) [_allocs removeObject:a[i]]; }
 - (void)removeAllAllocations { [_allocs removeAllObjects]; }
@@ -5591,8 +5637,10 @@ static int nvp_fast_off(void) {
 - (void)setColorStoreActionOptions:(MTLStoreActionOptions)o atIndex:(NSUInteger)i { _desc.colorAttachments[i].storeActionOptions = o; }
 - (void)setDepthStoreActionOptions:(MTLStoreActionOptions)o { _desc.depthAttachment.storeActionOptions = o; }
 - (void)setStencilStoreActionOptions:(MTLStoreActionOptions)o {
-    if (o) [_cb nvmtlRecordEncodingError:[NSError errorWithDomain:MTLCommandBufferErrorDomain
-        code:MTLCommandBufferErrorInternal userInfo:@{NSLocalizedDescriptionKey:@"stencil store options are illegal"}]];
+    // Apple accepts MTLStoreActionOptionCustomSamplePositions; only unknown bits are illegal.
+    if (o & ~MTLStoreActionOptionCustomSamplePositions)
+        [_cb nvmtlRecordEncodingError:[NSError errorWithDomain:MTLCommandBufferErrorDomain
+            code:MTLCommandBufferErrorInternal userInfo:@{NSLocalizedDescriptionKey:@"unknown stencil store options"}]];
     _desc.stencilAttachment.storeActionOptions = o;
 }
 - (void)insertDebugSignpost:(NSString *)s {}

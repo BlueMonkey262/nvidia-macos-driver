@@ -401,6 +401,10 @@ static int nvmtl_skip_empty_on(void) {
     if (_scheduleAfterPublish) return;
     [_completionCondition lock];
     if (!_wasScheduled) {
+        // kernelStart/End are host times for CPU scheduling (not GPU execution).
+        CFTimeInterval now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e9;
+        if (!_legacyKernelStart) _legacyKernelStart = now;
+        _legacyKernelEnd = now;
         _wasScheduled = YES; _cbstatus = MTLCommandBufferStatusScheduled;
         NSArray *handlers = [_scheduledHandlers copy]; [_scheduledHandlers removeAllObjects];
         [self nvmtlDispatchHandlers:handlers scheduled:YES];
@@ -439,7 +443,7 @@ static int nvmtl_skip_empty_on(void) {
     nvmtl_surface_finish_writes(self);
     [_completionCondition lock];
     _gpuStart = deviceStart; _gpuEnd = deviceEnd;
-    _legacyKernelEnd = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e9;
+    // kernelEndTime is schedule-end host time (set in nvmtlMarkScheduled), not execution finish.
     _cbError = error; _cbstatus = error ? MTLCommandBufferStatusError : MTLCommandBufferStatusCompleted;
     _executionDone = YES;
     [_completionCondition unlock];
@@ -553,7 +557,6 @@ static void nvmtl_prepare_submission_copies(NVMTLSubmissionPart *part) {
         if (!part->encoders && !part->resources.count && !part->surfaces.count && !part->scratch.count && nvmtl_skip_empty_on()) {
             if (!nvmtl_evfold_on() || _nextSubmit + 1 >= _parts.count) return NO;
             [self nvmtlMarkScheduled];
-        if (!_legacyKernelStart) _legacyKernelStart = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e9;
             nvmtl_vk_cmd_abandon(&part->commands);
             part->aheadEmpty = YES; _nextSubmit++;
             nvmtl_evfold_promise_part(part);
@@ -570,7 +573,6 @@ static void nvmtl_prepare_submission_copies(NVMTLSubmissionPart *part) {
         if (!f) return NO;
         for (NVMTLBuffer *buffer in part->copyInputs) nvmtl_buffer_sync_in(buffer);
         [self nvmtlMarkScheduled];
-        if (!_legacyKernelStart) _legacyKernelStart = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e9;
         const int r = nvmtl_vk_submit_begin(&part->commands, f);
         _nextSubmit++;
         if (r) {
@@ -625,14 +627,12 @@ static void nvmtl_gsub_ahead_pass1(void) {
     }
     if (!ahead && part->commands.cb && !part->encoders && !part->resources.count && !part->surfaces.count && !part->scratch.count && nvmtl_skip_empty_on()) {
         [self nvmtlMarkScheduled];
-        if (!_legacyKernelStart) _legacyKernelStart = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e9;
         nvmtl_vk_cmd_abandon(&part->commands);
         const unsigned long long k = atomic_fetch_add(&gSkipEmpty, 1);
         if (!k || ((k + 1) & 0xFFF) == 0) nvlog("commit: %llu empty submission parts NOT submitted (no encoder, no resources) - each WAS a full submit + wait", k + 1);
     }
     if (part->commands.cb || ahead) {
         [self nvmtlMarkScheduled];
-        if (!_legacyKernelStart) _legacyKernelStart = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e9;
         int result;
         if (part->inflight) result = nvmtl_gsub_finish(part);
         else if (part->aheadFailed) result = part->aheadFailed;
