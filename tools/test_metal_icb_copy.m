@@ -1,4 +1,8 @@
 // ICB blit copies/resets must precede later executes on the command-buffer timeline.
+// KNOWN FAILING BY DESIGN: this test documents a driver bug (ICB copy/reset ordering: the plugin mutates CPU slots at
+// encode time, so later executes can see the wrong commands). On the RTX 2060 Super VM it passes 12 checks and fails 9.
+// It is not a regression gate; copyIndirectCommandBuffer:... and resetCommandsInBuffer:... stay purple in
+// tools/metal-ratings.json until ordered command recording exists, and a run that starts passing means that work landed.
 // Build and run on macOS with the driver installed:
 //   clang -fobjc-arc -framework Metal -framework Foundation -o test_metal_icb_copy tools/test_metal_icb_copy.m
 //   ./test_metal_icb_copy
