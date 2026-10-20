@@ -16,7 +16,7 @@ struct nvidia_card_controlApp: App {
             CommandGroup(replacing: .newItem) {}
 
             CommandGroup(replacing: .appInfo) {
-                Button("About NVIDIA Card Control…") {
+                Button("About GPU Control…") {
                     showStandardAboutPanel()
                 }
             }
@@ -30,7 +30,7 @@ struct nvidia_card_controlApp: App {
             }
 
             CommandGroup(replacing: .help) {
-                Button("NVIDIA Card Control Help") {
+                Button("GPU Control Help") {
                     selectionHintAboutDriver()
                 }
             }
@@ -51,7 +51,7 @@ struct nvidia_card_controlApp: App {
 
     private func showStandardAboutPanel() {
         let options: [NSApplication.AboutPanelOptionKey: Any] = [
-            .applicationName: "NVIDIA Card Control",
+            .applicationName: "GPU Control",
             .credits: NSAttributedString(
                 string: String(
                     localized: "Experimental control panel for the NVIDIA Metal driver. Tested on one card in a virtual machine."
@@ -67,7 +67,7 @@ struct nvidia_card_controlApp: App {
 
     private func selectionHintAboutDriver() {
         let alert = NSAlert()
-        alert.messageText = String(localized: "NVIDIA Card Control Help")
+        alert.messageText = String(localized: "GPU Control Help")
         alert.informativeText = String(
             localized: "Use the sidebar to read driver status, change nvmtlctl settings, clear icon caches, restart the desktop, or collect logs. Writes ask for administrator access through osascript. App Sandbox must be off so the app can run nvmtlctl and read /Library/NullMoth."
         )

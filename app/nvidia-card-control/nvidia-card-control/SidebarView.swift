@@ -13,7 +13,7 @@ struct SidebarView: View {
                 .accessibilityLabel(Text(category.title))
         }
         .listStyle(.sidebar)
-        .navigationTitle("NVIDIA Card Control")
+        .navigationTitle("GPU Control")
     }
 }
 

@@ -10,7 +10,7 @@ struct AboutView: View {
 
     var body: some View {
         Form {
-            Section("NVIDIA Card Control") {
+            Section("GPU Control") {
                 LabeledContent("App version", value: appVersion)
                 LabeledContent("Bundle identifier", value: Bundle.main.bundleIdentifier ?? "—")
                 if let toolPath = store.toolPath {
