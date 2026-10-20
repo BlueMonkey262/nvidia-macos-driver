@@ -9,6 +9,8 @@ import Observation
 @Observable
 final class DriverStore {
     private(set) var status: DriverStatus?
+    /// Filled in once `nvmtlctl telemetry` exists; until then every tile shows a dash.
+    private(set) var telemetry: GPUTelemetry = .unavailable
     private(set) var confEntries: [ConfEntry] = []
     private(set) var cachesStatus: CachesStatus?
     private(set) var toolPath: String?

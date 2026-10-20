@@ -15,6 +15,10 @@ struct StatusView: View {
                         .accessibilityLabel(String(localized: "Loading driver status"))
                 }
             } else if let status = store.status {
+                Section {
+                    GPUHeaderView(gpuName: status.gpu, telemetry: store.telemetry)
+                }
+                .listRowBackground(Color.clear)
                 healthSection(status)
                 overviewSection(status)
                 pluginSection(status)
