@@ -296,6 +296,47 @@ static BOOL nvmtl_dir_writable(NSString *d) {
     if (ok) unlink(probe.fileSystemRepresentation);
     return ok;
 }
+// A cache entry's name carries the build of the translator that made it, so after a driver update none of the older
+// entries can ever be found again: they are dead weight, and the first login after an update pays to translate
+// everything from scratch while they sit there. The folder is swept once per process, on a background queue, so no
+// frame waits for it.
+// Measured on one machine: the window server's cache held 2,672 entries from seven translator builds (709 MB together
+// with the AIR cache) of which 372 were usable, and the login after an update spent 107 s at 79% CPU in translation
+// with nothing on screen. The size cap had never noticed, because the total stayed below it.
+// The sweep must not run before the translator has been opened. Until then the build tag is "untagged", nothing would
+// match it, and a cache the running driver can use would be deleted.
+static void nvmtl_spvcache_drop_stale(const char *dirc) {
+    if (!dirc || !strcmp(gXlateTag, "untagged")) {
+        nvlog("spvcache: stale-tag sweep SKIPPED - the translator has no cache tag yet; nothing was deleted");
+        return;
+    }
+    char suffix[128];
+    snprintf(suffix, sizeof suffix, ".%s.c3.spv", gXlateTag);
+    const size_t sn = strlen(suffix);
+    DIR *eh = opendir(dirc);
+    if (!eh) {
+        nvlog("spvcache: stale-tag sweep CANNOT READ %s: %s - entries from older drivers are left in place",
+              dirc, strerror(errno));
+        return;
+    }
+    unsigned long gone = 0, kept = 0, failed = 0;
+    unsigned long long freed = 0;
+    const struct dirent *de;
+    while ((de = readdir(eh)) != NULL) {
+        const size_t n = strlen(de->d_name);
+        if (n < 7 || strcmp(de->d_name + n - 7, ".c3.spv") != 0) continue;   /* not one of ours */
+        if (n >= sn && strcmp(de->d_name + n - sn, suffix) == 0) { kept++; continue; }
+        char full[1200];
+        if (snprintf(full, sizeof full, "%s/%s", dirc, de->d_name) >= (int)sizeof full) continue;
+        struct stat st;
+        const unsigned long long sz = (stat(full, &st) == 0) ? (unsigned long long)st.st_size : 0;
+        if (unlink(full) == 0) { gone++; freed += sz; } else failed++;
+    }
+    closedir(eh);
+    if (gone || failed)
+        nvlog("spvcache: dropped %lu entries / %llu MiB left by earlier drivers (%lu match %s, %lu could not be removed)",
+              gone, freed >> 20, kept, gXlateTag, failed);
+}
 static NSString *nvmtl_spvcache_dir(void) {
     static NSString *dir; static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -310,6 +351,18 @@ static NSString *nvmtl_spvcache_dir(void) {
 static NSString *nvmtl_spvcache_path_digest(const unsigned char h[CC_SHA256_DIGEST_LENGTH], NSString *stage) {
     NSString *d = nvmtl_spvcache_dir();
     if (!d) return nil;
+    // Sweep the folder clear of other builds' entries once, here rather than where the folder is chosen: a process
+    // that picks its folder before the translator is open does not know the build yet and would skip the sweep for
+    // good. The window server does exactly that, so its cache kept seven builds' entries. By the time a path is
+    // being built the build tag is real, because the name below is made from it.
+    static dispatch_once_t sweepOnce;
+    if (!getenv("NVMTL_SPVCACHE_KEEP_STALE")) dispatch_once(&sweepOnce, ^{
+        NSString *chosen = d;
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            char dirc[1024];
+            if ([chosen getFileSystemRepresentation:dirc maxLength:sizeof dirc]) nvmtl_spvcache_drop_stale(dirc);
+        });
+    });
     char hex[2 * CC_SHA256_DIGEST_LENGTH + 1];
     for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) snprintf(hex + 2 * i, 3, "%02x", h[i]);
     nvmtl_spvcache_trim_async(d);
