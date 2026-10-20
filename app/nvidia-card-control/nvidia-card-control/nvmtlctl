@@ -1,0 +1,163 @@
+#!/bin/bash
+# nvmtlctl: status, settings, cache clearing and log collection for the NVIDIA Metal driver on macOS.
+# Meant for people and for a GUI to drive (every read command has --json). Commands that change things need sudo.
+#   nvmtlctl status [--json]            driver, macOS, GPU, plugin and encoder state
+#   nvmtlctl conf list [--json]         known settings and their current values in nvrm610.conf
+#   nvmtlctl conf get KEY | set KEY VALUE | unset KEY
+#   nvmtlctl caches status|clear [--dry-run]   system icon caches that go stale across macOS or driver changes
+#   nvmtlctl boot-check [--dry-run]     clear the caches once when the macOS build or driver version changed (for a LaunchDaemon)
+#   nvmtlctl restart-windowserver       log the desktop session out and back in (the desktop restarts)
+#   nvmtlctl logs [DIR]                 collect driver state and logs into DIR (default ~/nvmtl-logs-DATE); nothing is sent anywhere
+# Exit codes: 0 ok, 1 failed, 2 usage, 3 needs sudo.
+set -u
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+VERSION=0.1
+NM=/Library/NullMoth
+BUNDLE=/Library/GPUBundles/NVMTLDriver.bundle/Contents/MacOS
+CONF=/Library/GPUBundles/nvmtl/nvrm610.conf
+KEYFILE=$NM/cache-key
+JSON=0; DRY=0
+
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+need_root() { [ "$(id -u)" = 0 ] || { echo "nvmtlctl: this needs sudo" >&2; exit 3; }; }
+jesc() { local t; t=$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'); t=${t//$'\n'/\\n}; t=${t//$'\t'/\\t}; printf '%s' "$t"; }
+jstr() { printf '"%s"' "$(jesc "$1")"; }
+file_or() { [ -r "$1" ] && head -1 "$1" || echo "$2"; }
+sha8() { [ -r "$1" ] && shasum -a 256 "$1" | cut -c1-8 || echo ""; }
+
+# knob name | default | what it does (the settings that matter in practice; nvrm610.conf accepts any NVMTL_ name)
+KNOBS='NVMTL_FBFETCH_WS|0|Let WindowServer read the framebuffer in shaders (off by default; unproven)
+NVMTL_VT_RC|0|Bitrate control for hardware video encode (H.264/HEVC on Turing)
+NVMTL_NVENC_HEVC|0|Hardware HEVC encode on Turing (experimental)
+NVMTL_NO_NVENC|0|Keep video encode on Apple'"'"'s encoder
+NVMTL_NO_VT_SPEC_HOOK|0|Turn off the VideoToolbox low-latency fix that Sunshine needs
+NVMTL_POOL_KEEP|16|Command pools kept per process (0-256); lower avoids the per-process client limit
+NVMTL_ASYNC_TEX_UPLOAD|0|Upload textures without waiting for the GPU (faster loading)
+NVMTL_NO_BUFTEX_RECYCLE|0|Do not reuse buffer-backed textures (debugging)
+NVMTL_VRAM_HEADROOM_MB|256|VRAM kept free before images spill to system memory'
+
+conf_val() { [ -r "$CONF" ] && sed -n "s/^$1=//p" "$CONF" | tail -1; }
+
+cmd_status() {
+  local mac build gpu metal kx pkg plugin_sha plugin_size enc_h264 enc_hevc bargs
+  mac=$(sw_vers -productVersion); build=$(sw_vers -buildVersion)
+  pkg=$(file_or $NM/driver-version unknown)
+  gpu=$(system_profiler SPDisplaysDataType 2>/dev/null | sed -n 's/^ *Chipset Model: //p' | grep -i nvidia | head -1)
+  metal=$(system_profiler SPDisplaysDataType 2>/dev/null | sed -n 's/^ *Metal Support: //p' | head -1)
+  kx=$(kmutil showloaded --list-only 2>/dev/null | grep -o 'com\.nullmoth\.[A-Za-z]* ([0-9.]*)' | tr '\n' ',' | sed 's/,$//')
+  plugin_sha=$(sha8 $BUNDLE/NVMTLDriver); plugin_size=$(stat -f %z $BUNDLE/NVMTLDriver 2>/dev/null || echo 0)
+  enc_h264=$([ -e $BUNDLE/libnvenc_h264_t2d.dylib ] && echo yes || echo no)
+  enc_hevc=$([ -e $BUNDLE/libnvenc_hevc_t2d.dylib ] && echo yes || echo no)
+  bargs=$(nvram boot-args 2>/dev/null | cut -f2-)
+  if [ $JSON = 1 ]; then
+    printf '{"tool":%s,"macos":%s,"build":%s,"package":%s,"gpu":%s,"metal":%s,"kexts":%s,"plugin_sha8":%s,"plugin_bytes":%s,"turing_h264_encoder_lib":%s,"turing_hevc_encoder_lib":%s,"boot_args":%s,"cache_key":%s}\n' \
+      "$(jstr $VERSION)" "$(jstr "$mac")" "$(jstr "$build")" "$(jstr "$pkg")" "$(jstr "$gpu")" "$(jstr "$metal")" "$(jstr "$kx")" "$(jstr "$plugin_sha")" "$plugin_size" "$(jstr $enc_h264)" "$(jstr $enc_hevc)" "$(jstr "$bargs")" "$(jstr "$(file_or $KEYFILE none)")"
+  else
+    echo "nvmtlctl $VERSION"
+    echo "macOS:        $mac ($build)"
+    echo "Package:      $pkg"
+    echo "GPU:          ${gpu:-not found}   Metal: ${metal:-?}"
+    echo "Kexts loaded: ${kx:-none}"
+    echo "Plugin:       sha $plugin_sha, $plugin_size bytes"
+    echo "Turing encoders: H.264 lib $enc_h264, HEVC lib $enc_hevc"
+    echo "Boot args:    $bargs"
+    echo "Cache key:    $(file_or $KEYFILE none)"
+  fi
+}
+
+cmd_conf() {
+  local sub=${1:-list}; shift || true
+  case $sub in
+    list)
+      if [ $JSON = 1 ]; then
+        local first=1; printf '['
+        echo "$KNOBS" | while IFS='|' read -r k d desc; do
+          [ $first = 1 ] || printf ','; first=0
+          v=$(conf_val "$k"); printf '{"key":%s,"default":%s,"value":%s,"description":%s}' "$(jstr "$k")" "$(jstr "$d")" "$(jstr "${v:-$d}")" "$(jstr "$desc")"
+        done; echo ']'
+      else
+        echo "$KNOBS" | while IFS='|' read -r k d desc; do
+          v=$(conf_val "$k"); printf '%-26s %-5s (default %s)  %s\n' "$k" "${v:-$d}" "$d" "$desc"; done
+        echo "(file: $CONF; keys not listed above can still be set)"
+      fi ;;
+    get) [ $# = 1 ] || usage; conf_val "$1" ;;
+    set) [ $# = 2 ] || usage; need_root
+      case $1 in NVMTL_[A-Z0-9_]*) ;; *) echo "nvmtlctl: key must look like NVMTL_NAME" >&2; exit 2;; esac
+      case $2 in *[!A-Za-z0-9_.-]*|"") echo "nvmtlctl: value may only use letters, digits, _ . -" >&2; exit 2;; esac
+      mkdir -p "$(dirname $CONF)"; touch $CONF
+      cp $CONF "$CONF.bak-$(date +%Y%m%d-%H%M%S)"
+      grep -v "^$1=" $CONF > "$CONF.new" || true; echo "$1=$2" >> "$CONF.new"; mv "$CONF.new" $CONF
+      echo "set $1=$2 (a backup of the old file is next to it; processes read it when they start: restart the app, or the desktop for WindowServer)" ;;
+    unset) [ $# = 1 ] || usage; need_root; [ -e $CONF ] || exit 0
+      cp $CONF "$CONF.bak-$(date +%Y%m%d-%H%M%S)"; grep -v "^$1=" $CONF > "$CONF.new" || true; mv "$CONF.new" $CONF; echo "unset $1" ;;
+    *) usage ;;
+  esac
+}
+
+# Disposable caches whose contents depend on how the driver rendered at the time. All are rebuilt by macOS on demand.
+cache_paths() {
+  ls -d /Library/Caches/com.apple.iconservices.store \
+        /private/var/folders/*/*/C/com.apple.iconservices \
+        /private/var/folders/*/*/C/com.apple.iconservicesagent \
+        /private/var/folders/*/*/C/com.apple.dock.iconcache \
+        /private/var/folders/*/*/0/com.apple.dock.launchpad \
+        /private/var/folders/*/*/T/com.apple.iconservicesagent 2>/dev/null
+}
+cmd_caches() {
+  local sub=${1:-status}; shift || true
+  case $sub in
+    status)
+      local list n; list=$(cache_paths); n=$(printf '%s' "$list" | grep -c .)
+      if [ $JSON = 1 ]; then
+        local first=1; printf '{"count":%s,"paths":[' "$n"
+        printf '%s\n' "$list" | while read -r p; do [ -n "$p" ] || continue; [ $first = 1 ] || printf ','; first=0; printf '%s' "$(jstr "$p")"; done; echo ']}'
+      else echo "$n icon-related caches present"; printf '%s\n' "$list"; fi ;;
+    clear)
+      [ "${1:-}" = "--dry-run" ] && DRY=1
+      [ $DRY = 1 ] || need_root
+      cache_paths | while read -r p; do [ -n "$p" ] || continue
+        if [ $DRY = 1 ]; then echo "would remove $p"; else rm -rf "$p" && echo "removed $p"; fi; done
+      [ $DRY = 1 ] || echo "done; icons are rebuilt at the next login or restart (the first one is slow, minutes, then it is normal)" ;;
+    *) usage ;;
+  esac
+}
+
+cmd_boot_check() {
+  [ "${1:-}" = "--dry-run" ] && DRY=1
+  local key now; now="$(sw_vers -buildVersion)+$(file_or $NM/driver-version unknown)+$(sha8 $BUNDLE/NVMTLDriver)"
+  key=$(file_or $KEYFILE "")
+  if [ "$key" = "$now" ]; then echo "cache key unchanged ($now): nothing to do"; return 0; fi
+  echo "cache key changed: '${key:-none}' -> '$now'"
+  if [ $DRY = 1 ]; then cmd_caches clear --dry-run; echo "would write $KEYFILE"; return 0; fi
+  need_root; cmd_caches clear; mkdir -p $NM && printf '%s\n' "$now" > $KEYFILE
+}
+
+cmd_restart_ws() { need_root; echo "restarting WindowServer: the desktop session ends and comes back"; killall -9 WindowServer; }
+
+cmd_logs() {
+  local d=${1:-$HOME/nvmtl-logs-$(date +%Y%m%d-%H%M%S)}; mkdir -p "$d"
+  cmd_status > "$d/status.txt" 2>&1; JSON=1 cmd_status > "$d/status.json" 2>&1
+  { echo "# conf"; cat $CONF 2>/dev/null; } > "$d/conf.txt"
+  cp /tmp/nvmtl.log "$d/nvmtl.log" 2>/dev/null
+  { sw_vers; uname -a; kmutil showloaded --list-only 2>/dev/null | grep -i -E 'nullmoth|nvidia'; } > "$d/system.txt" 2>&1
+  system_profiler SPDisplaysDataType > "$d/displays.txt" 2>&1
+  ls -l $NM $BUNDLE > "$d/files.txt" 2>&1
+  tail -50 $NM/lastgood.log > "$d/lastgood.txt" 2>/dev/null
+  log show --last 10m --predicate 'sender CONTAINS "NVRM" OR sender CONTAINS "NVAccel" OR process == "WindowServer"' --style compact 2>/dev/null | tail -400 > "$d/system-log-10m.txt"
+  ls -1t ~/Library/Logs/DiagnosticReports 2>/dev/null | head -5 | while read -r f; do cp ~/Library/Logs/DiagnosticReports/"$f" "$d/" 2>/dev/null; done
+  echo "collected in $d (review it before you share it: it contains your user name in paths and the GPU state; nothing was sent)"
+}
+
+# argument parsing: allow --json anywhere
+ARGS=(); for a in "$@"; do case $a in --json) JSON=1;; *) ARGS+=("$a");; esac; done
+set -- ${ARGS[@]+"${ARGS[@]}"}
+case ${1:-} in
+  status) cmd_status ;;
+  conf) shift; cmd_conf "$@" ;;
+  caches) shift; cmd_caches "$@" ;;
+  boot-check) shift; cmd_boot_check "$@" ;;
+  restart-windowserver) cmd_restart_ws ;;
+  logs) shift; cmd_logs "$@" ;;
+  version|--version) echo "nvmtlctl $VERSION" ;;
+  *) usage ;;
+esac
