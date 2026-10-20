@@ -18,13 +18,15 @@ struct TestsView: View {
                         .accessibilityLabel(String(localized: "Loading tests"))
                 }
             } else if testsStore.definitions.isEmpty {
-                ContentUnavailableView {
-                    Label("No tests", systemImage: "checkmark.seal")
-                } description: {
-                    Text(emptyDescription)
-                } actions: {
-                    Button("Refresh") {
-                        Task { await testsStore.refreshList() }
+                Section {
+                    ContentUnavailableView {
+                        Label("No tests", systemImage: "checkmark.seal")
+                    } description: {
+                        Text(emptyDescription)
+                    } actions: {
+                        Button("Refresh") {
+                            Task { await testsStore.refreshList() }
+                        }
                     }
                 }
             } else {
@@ -38,20 +40,20 @@ struct TestsView: View {
                         }
                     }
                 }
+            }
 
-                Section {
-                    Button("Open test pattern") {
-                        openWindow(id: StreamPatternWindow.id)
-                    }
-                    .accessibilityHint(
-                        String(localized: "Opens a full-window animated pattern for streaming encode tests")
-                    )
-                } header: {
-                    Text("Stream pattern")
-                } footer: {
-                    Text("Opens a separate window with scrolling colour bars, noise, text and motion so a streaming encoder has demanding, recognisable content.")
-                        .foregroundStyle(.secondary)
+            Section {
+                Button("Open test pattern") {
+                    openWindow(id: StreamPatternWindow.id)
                 }
+                .accessibilityHint(
+                    String(localized: "Opens a full-window animated pattern for streaming encode tests")
+                )
+            } header: {
+                Text("Stream pattern")
+            } footer: {
+                Text("Opens a separate window with scrolling colour bars, noise, text and motion so a streaming encoder has demanding, recognisable content.")
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
