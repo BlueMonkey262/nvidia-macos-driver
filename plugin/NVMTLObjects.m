@@ -5273,13 +5273,15 @@ destinationBytesPerImage:(NSUInteger)img options:(MTLBlitOption)opt {
     [_completionCondition unlock]; return value;
 }
 - (CFTimeInterval)kernelStartTime {
+    // CPU scheduling window of the first submission part, not GPU time or the whole multipart buffer.
+    // Readable by scheduled handlers; a later command-buffer error makes both kernel times zero.
     [_completionCondition lock];
-    CFTimeInterval value = _legacyKernelStart;
+    CFTimeInterval value = !_cbError ? _legacyKernelStart : 0;
     [_completionCondition unlock]; return value;
 }
 - (CFTimeInterval)kernelEndTime {
     [_completionCondition lock];
-    CFTimeInterval value = _legacyKernelEnd;
+    CFTimeInterval value = !_cbError ? _legacyKernelEnd : 0;
     [_completionCondition unlock]; return value;
 }
 - (void)waitUntilCompleted {
