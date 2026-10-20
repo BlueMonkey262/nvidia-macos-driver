@@ -2581,9 +2581,12 @@ static size_t nvmtl_fc_width(NSUInteger dataType)
 }
 - (void)newFunctionWithDescriptor:(id)desc completionHandler:(void (^)(id<MTLFunction>, NSError *))handler {
     if (!handler) return;
-    NSError *err = nil;
-    id<MTLFunction> f = [self newFunctionWithDescriptor:desc error:&err];
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ handler(f, err); });
+    MTLFunctionDescriptor *descCopy = [desc copy];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ @autoreleasepool {
+        NSError *err = nil;
+        id<MTLFunction> f = [self newFunctionWithDescriptor:descCopy error:&err];
+        handler(f, f ? nil : err);
+    }});
 }
 - (NSArray<NSString *> *)externFunctionNames {
     NSSet<NSString *> *x = nvmtl_mtlb_extern_names(_raw);

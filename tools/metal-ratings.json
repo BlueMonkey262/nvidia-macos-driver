@@ -2534,8 +2534,8 @@
    "status": "great"
   },
   "newFunctionWithDescriptor:completionHandler:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2504 (model-reviewed, not tested)",
-   "note": "Calls the sync descriptor path then the handler; still ignores descriptor options beyond name/constants.",
+   "evidence": "read from source: plugin/NVMTLObjects.m newFunctionWithDescriptor:completionHandler:; expanded tools/test_metal_async_specialize.m not built or VM-tested",
+   "note": "Copies the descriptor and performs creation and callback off the caller; FC translator entry shares a leaf mutex with sync callers. Other descriptor limitations remain.",
    "status": "improve"
   },
   "newFunctionWithDescriptor:error:": {
@@ -2550,7 +2550,7 @@
   },
   "newFunctionWithName:constantValues:completionHandler:": {
    "evidence": "tested: tools/test_metal_async_specialize.m passes on the RTX 2060 Super VM (fails on the previous plugin)",
-   "note": "Specializes off the caller thread and calls the handler once.",
+   "note": "Specializes off the caller thread and calls the handler once. FC translator entry now shares a leaf mutex with sync/variant callers (read from source); expanded concurrent/snapshot/error probe not built or VM-tested.",
    "status": "great"
   },
   "newFunctionWithName:constantValues:error:": {

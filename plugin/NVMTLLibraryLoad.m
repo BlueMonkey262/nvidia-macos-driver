@@ -11,6 +11,7 @@
 #import "NVMTLObjects.h"
 #include <dlfcn.h>
 #include <stdatomic.h>
+#include <pthread.h>
 #include <spawn.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -77,6 +78,18 @@ static nvmtl_sampler_fn xlate_sampler;
 typedef void (*nvmtl_tglen_fn)(const uint32_t *, uint32_t);
 static nvmtl_tglen_fn xlate_tglen;
 static nvmtl_fc_fn xlate_fc;
+static pthread_mutex_t g_fc_translate_lock = PTHREAD_MUTEX_INITIALIZER;
+static int nvmtl_xlate_fc_serial(const char *ll, const char *stage, const uint32_t *idx, const uint32_t *sizes,
+                                const uint8_t *const *payloads, size_t n, uint8_t **out, size_t *out_len,
+                                char *err, size_t err_len)
+{
+    // Sync callers can already hold a library/function lock. Keep this a leaf lock: no Objective-C calls,
+    // cache lookups, or callbacks while held, and use it at both function-constant translator entry sites.
+    pthread_mutex_lock(&g_fc_translate_lock);
+    int r = xlate_fc(ll, stage, idx, sizes, payloads, n, out, out_len, err, err_len);
+    pthread_mutex_unlock(&g_fc_translate_lock);
+    return r;
+}
 static nvmtl_refl_fn xlate_refl;
 static nvmtl_refl_fc_fn xlate_refl_fc;
 static nvmtl_free_fn xlate_free;
@@ -1118,7 +1131,7 @@ NSData *nvmtl_translate_with_fc(NSString *ll, NSString *stage, const uint32_t *i
     if (!xlate_fc) { if (err) *err = @"this translator has no nvmtl_translate_fc — rebuild nvmtl_translate"; return nil; }
     if (!ll || !stage.length) { if (err) *err = @"no AIR kept for this function"; return nil; }
     uint8_t *out = NULL; size_t out_len = 0; char e[512] = {0};
-    if (xlate_fc(ll.UTF8String, stage.UTF8String, idx, sizes, payloads, n, &out, &out_len, e, sizeof e) != 0) {
+    if (nvmtl_xlate_fc_serial(ll.UTF8String, stage.UTF8String, idx, sizes, payloads, n, &out, &out_len, e, sizeof e) != 0) {
         nvlog("function constants: re-translate FAILED: %s", e);
         // NVMTL_FC_FAIL_DUMP=<dir>: keep the refused module (AIR text, stage, constant values, error) so the refusal can be
         // replayed offline against the translator; nothing is written unless the variable is set.
@@ -1689,7 +1702,7 @@ NSData *nvmtl_translate_variant_uncached(NVMTLFunction *fn, NSDictionary *states
                 nvlog("ZFC idx %-4u size %-2u bytes %s", idx[nfc-1], sz[nfc-1], fx);
             }
         }
-        if(xlate_fc(fn->_air.UTF8String,fn->_stage.UTF8String,idx,sz,pay,nfc,&out,&len,e,sizeof e)) { if(err)*err=@(e); }
+        if(nvmtl_xlate_fc_serial(fn->_air.UTF8String,fn->_stage.UTF8String,idx,sz,pay,nfc,&out,&len,e,sizeof e)) { if(err)*err=@(e); }
         else { data=[NSData dataWithBytes:out length:len]; xlate_free(out,len);
                nvlog("threadgroup variant: %s re-specialized with %zu constant(s) -> %lu B",
                      fn->_fname.UTF8String, nfc, (unsigned long)data.length); }
