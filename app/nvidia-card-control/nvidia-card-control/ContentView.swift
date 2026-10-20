@@ -50,8 +50,6 @@ struct ContentView: View {
             SunshineView(store: store)
         case .performance:
             PerformanceView(store: store)
-        case .pointer:
-            PointerView()
         case .logs:
             LogsView(store: store)
         case .about:

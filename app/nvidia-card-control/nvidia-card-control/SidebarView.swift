@@ -23,7 +23,6 @@ struct SidebarView: View {
                 row(.video)
             }
             row(.performance)
-            row(.pointer)
             row(.logs)
             row(.about)
         }
