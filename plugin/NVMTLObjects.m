@@ -2582,7 +2582,8 @@ static size_t nvmtl_fc_width(NSUInteger dataType)
 }
 - (void)newFunctionWithDescriptor:(id)desc completionHandler:(void (^)(id<MTLFunction>, NSError *))handler {
     if (!handler) return;
-    MTLFunctionDescriptor *descCopy = [desc copy];
+    // Snapshot on the caller's thread; a descriptor that cannot be copied is used as passed, as the synchronous path does.
+    id descCopy = [desc respondsToSelector:@selector(copyWithZone:)] ? [desc copy] : desc;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ @autoreleasepool {
         NSError *err = nil;
         id<MTLFunction> f = [self newFunctionWithDescriptor:descCopy error:&err];
