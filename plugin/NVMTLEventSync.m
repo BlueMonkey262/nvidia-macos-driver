@@ -31,7 +31,8 @@ static int nvmtl_gsub_finish(NVMTLSubmissionPart *part) {
     part->inflight = NULL;
     const int r = nvmtl_vk_submit_finish(f);
     atomic_fetch_sub(&gsub_inflight, 1);
-    if (r == 0) nvmtl_vk_inflight_free(f);
+    if (r == -2) nvmtl_vk_inflight_quarantine(f);
+    else nvmtl_vk_inflight_free(f);
     return r;
 }
 @interface NVMTLPendingSurfaceWrite : NSObject {
@@ -582,7 +583,8 @@ static void nvmtl_prepare_submission_copies(NVMTLSubmissionPart *part) {
         [self nvmtlMarkScheduled];
         _nextSubmit++;
         if (r) {
-            nvmtl_vk_inflight_free(f);
+            if (r == -2) nvmtl_vk_inflight_quarantine(f);
+            else nvmtl_vk_inflight_free(f);
             part->aheadFailed = r;
             return NO;
         }
@@ -652,7 +654,8 @@ static void nvmtl_gsub_ahead_pass1(void) {
                 result = nvmtl_vk_submit_begin(&part->commands, f);
                 [self nvmtlMarkScheduled];
                 if (!result) result = nvmtl_vk_submit_finish(f);
-                if (result != -2) nvmtl_vk_inflight_free(f);
+                if (result == -2) nvmtl_vk_inflight_quarantine(f);
+                else nvmtl_vk_inflight_free(f);
             }
         }
         if (result == -2) {

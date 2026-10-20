@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdatomic.h>
+#include <errno.h>
 #include <math.h>
 #define VK_NO_PROTOTYPES 1
 #include <vulkan/vulkan.h>
@@ -1109,12 +1110,15 @@ static int memtype(uint32_t bits, VkMemoryPropertyFlags want)
     return -1;
 }
 
-static uint64_t g_own_maps, g_own_map_size[4];
+static _Atomic uint64_t g_own_maps, g_own_map_size[4], g_own_map_failures;
 static void nvmtl_own_map_census(const char *what)
 {
     nvlog("vk: own CPU maps (%s): %llu made, by size <=4 MiB %llu, <=16 MiB %llu, <=64 MiB %llu, larger %llu",
-          what, (unsigned long long)g_own_maps, (unsigned long long)g_own_map_size[0], (unsigned long long)g_own_map_size[1],
-          (unsigned long long)g_own_map_size[2], (unsigned long long)g_own_map_size[3]);
+          what, (unsigned long long)atomic_load_explicit(&g_own_maps, memory_order_relaxed),
+          (unsigned long long)atomic_load_explicit(&g_own_map_size[0], memory_order_relaxed),
+          (unsigned long long)atomic_load_explicit(&g_own_map_size[1], memory_order_relaxed),
+          (unsigned long long)atomic_load_explicit(&g_own_map_size[2], memory_order_relaxed),
+          (unsigned long long)atomic_load_explicit(&g_own_map_size[3], memory_order_relaxed));
 }
 #define NVMTL_POOL_BLOCK (32u << 20)
 #define NVMTL_POOL_MAX   (4u << 20)
@@ -1374,13 +1378,20 @@ static int nvmtl_vk_buffer_create_body(size_t size, int host_visible, nvk_buffer
     if (!host_visible) nvmtl_vk_budget_charge(mr.size);
     VKCK(pvkBindBufferMemory(g_dev, out->buf, out->mem, 0), "vkBindBufferMemory");
     if (host_visible) { VkResult mr_ = pvkMapMemory(g_dev, out->mem, 0, VK_WHOLE_SIZE, 0, &out->map); if (mr_ != VK_SUCCESS) {
-        nvlog("vk: vkMapMemory -> %d for a %llu byte buffer with %llu buffers live (%llu made, %llu gone), %zu bytes allocated, memory type %d", mr_,
-              (unsigned long long)mr.size, (unsigned long long)(g_buf_made - g_buf_gone), (unsigned long long)g_buf_made, (unsigned long long)g_buf_gone, g_alloc_bytes, mt);
-        nvmtl_own_map_census("failed");
+        uint64_t failed = atomic_fetch_add_explicit(&g_own_map_failures, 1, memory_order_relaxed) + 1;
+        if (failed <= 8 || (failed & 0x1FF) == 0)
+            nvlog("vk: vkMapMemory -> %d for a %llu byte buffer with %llu buffers live (%llu made, %llu gone), %zu bytes allocated, memory type %d; "
+                  "own CPU maps (failed): %llu made, by size <=4 MiB %llu, <=16 MiB %llu, <=64 MiB %llu, larger %llu", mr_,
+                  (unsigned long long)mr.size, (unsigned long long)(g_buf_made - g_buf_gone), (unsigned long long)g_buf_made, (unsigned long long)g_buf_gone, g_alloc_bytes, mt,
+                  (unsigned long long)atomic_load_explicit(&g_own_maps, memory_order_relaxed),
+                  (unsigned long long)atomic_load_explicit(&g_own_map_size[0], memory_order_relaxed),
+                  (unsigned long long)atomic_load_explicit(&g_own_map_size[1], memory_order_relaxed),
+                  (unsigned long long)atomic_load_explicit(&g_own_map_size[2], memory_order_relaxed),
+                  (unsigned long long)atomic_load_explicit(&g_own_map_size[3], memory_order_relaxed));
         return -1; }
         // Each map of its own (not pooled) is one kernel client; the per-process cap is 4096.
-        g_own_map_size[mr.size <= (4u << 20) ? 0 : mr.size <= (16u << 20) ? 1 : mr.size <= (64u << 20) ? 2 : 3]++;
-        if ((++g_own_maps & 0x1FF) == 0) nvmtl_own_map_census("running"); }
+        atomic_fetch_add_explicit(&g_own_map_size[mr.size <= (4u << 20) ? 0 : mr.size <= (16u << 20) ? 1 : mr.size <= (64u << 20) ? 2 : 3], 1, memory_order_relaxed);
+        if (((atomic_fetch_add_explicit(&g_own_maps, 1, memory_order_relaxed) + 1) & 0x1FF) == 0) nvmtl_own_map_census("running"); }
     g_alloc_bytes += mr.size;
     g_buf_made++;
     if ((g_buf_made & 0xFFF) == 0) nvlog("buffer census: %llu made, %llu gone, %llu live, %zu bytes allocated; pool %llu blocks, %llu pooled live, %llu bytes in ranges",
@@ -2563,27 +2574,29 @@ typedef struct nvmtl_address_page { nvk_buffer buffer; struct nvmtl_address_page
 // mapping is one NVRM client of the 4096 a process may hold (kNvClientsPerPid). 256 kept pools reached that limit
 // in Factorio, so the number kept is small by default; NVMTL_POOL_KEEP overrides it (0..256).
 #define NVMTL_KEEP_DEFAULT 16
-static unsigned nvmtl_keep_limit(void)
+static pthread_once_t g_keep_once = PTHREAD_ONCE_INIT;
+static unsigned g_keep_limit = NVMTL_KEEP_DEFAULT;
+static int g_keep_enabled;
+static void nvmtl_keep_init(void)
 {
-    static int lim = -1;
-    if (lim < 0) { const char *e = getenv("NVMTL_POOL_KEEP"); int v = e ? atoi(e) : NVMTL_KEEP_DEFAULT;
-        lim = v < 0 ? 0 : v > NVMTL_KEEP ? NVMTL_KEEP : v; }
-    return (unsigned)lim;
+    const char *e = getenv("NVMTL_POOL_KEEP");
+    if (e) {
+        char *end = NULL; errno = 0;
+        long v = strtol(e, &end, 10);
+        if (errno == ERANGE || end == e || *end || v < 0 || v > NVMTL_KEEP)
+            nvlog("vk: invalid NVMTL_POOL_KEEP=\"%s\" (expected 0..%u); using default %u", e, NVMTL_KEEP, NVMTL_KEEP_DEFAULT);
+        else g_keep_limit = (unsigned)v;
+    }
+    e = getenv("NVMTL_POOL_REUSE");
+    g_keep_enabled = g_keep_limit && (!e || e[0] == '1') && getenv("NVMTL_NO_POOL_REUSE") == NULL;
+    if (g_keep_enabled) nvlog("vk: pool reuse ON (witness-guarded default) - empty command pools and address pages kept (<= %u, NVMTL_POOL_KEEP), reused only on THE WITNESS", g_keep_limit);
+    else nvlog("vk: pool reuse OFF by environment (NVMTL_POOL_KEEP=%u) - command pools and address pages are created and destroyed per commit", g_keep_limit);
 }
+static unsigned nvmtl_keep_limit(void) { pthread_once(&g_keep_once, nvmtl_keep_init); return g_keep_limit; }
+static int nvmtl_keep_on(void) { pthread_once(&g_keep_once, nvmtl_keep_init); return g_keep_enabled; }
 static pthread_mutex_t g_keep_lock = PTHREAD_MUTEX_INITIALIZER;
 static VkCommandPool g_keep_pool[NVMTL_KEEP]; static unsigned g_keep_npool;
 static nvmtl_address_page *g_keep_page[NVMTL_KEEP]; static unsigned g_keep_npage;
-static int nvmtl_keep_on(void)
-{
-    static int on = -1;
-    if (on < 0) {
-        const char *e = getenv("NVMTL_POOL_REUSE");
-        on = (!e || e[0] == '1') && getenv("NVMTL_NO_POOL_REUSE") == NULL;
-        if (on) nvlog("vk: pool reuse ON (witness-guarded default) - empty command pools and address pages kept (<= %u, NVMTL_POOL_KEEP), reused only on THE WITNESS", nvmtl_keep_limit());
-        else nvlog("vk: pool reuse OFF by environment - command pools and address pages are created and destroyed per commit");
-    }
-    return on;
-}
 static VkCommandPool nvmtl_keep_pool_pop(void)
 {
     VkCommandPool p = VK_NULL_HANDLE;
@@ -5685,9 +5698,19 @@ static void nvmtl_pre_drop(nvmtl_prologue *p)
     for (unsigned i = 0; i < p->nhold; i++) if (p->hold[i] && nvmtl_pre_release_hook) nvmtl_pre_release_hook(p->hold[i]);
     p->nhold = 0;
 }
-struct nvmtl_inflight { nvk_cmdbuf *c; VkFence fence; nvmtl_prologue pre; uint64_t pt[8]; };
+struct nvmtl_inflight { nvk_cmdbuf *c; VkFence fence; nvmtl_prologue pre; uint64_t pt[8]; struct nvmtl_inflight *next; };
 nvmtl_inflight *nvmtl_vk_inflight_new(void) { return calloc(1, sizeof(nvmtl_inflight)); }
 void nvmtl_vk_inflight_free(nvmtl_inflight *f) { free(f); }
+static pthread_mutex_t g_inflight_quarantine_lock = PTHREAD_MUTEX_INITIALIZER;
+static nvmtl_inflight *g_inflight_quarantine;
+void nvmtl_vk_inflight_quarantine(nvmtl_inflight *f)
+{
+    // -2 includes a timeout or missing witness, not just confirmed device loss. Keep the fence and prologue
+    // reachable for process lifetime: neither may be destroyed while the GPU could still be using them.
+    pthread_mutex_lock(&g_inflight_quarantine_lock);
+    f->next = g_inflight_quarantine; g_inflight_quarantine = f;
+    pthread_mutex_unlock(&g_inflight_quarantine_lock);
+}
 void nvmtl_vk_gsub_nvk_stats(uint64_t *out, unsigned n)
 {
     static void (*fn)(uint64_t *, unsigned); static int looked;
@@ -5752,6 +5775,7 @@ int nvmtl_vk_submit_begin_at(nvk_cmdbuf *c, nvmtl_inflight *f, const char *who)
     result = pvkCreateFence(g_dev, &fci, NULL, &fence);
     const uint64_t sC = nvmtl_perf_now();
     if (result != VK_SUCCESS) { nvmtl_cmd_retire(c); return -1; }
+    f->fence = fence;
     nvmtl_prologue *const pre = &f->pre;
     pthread_mutex_lock(&nvmtl_submit_mutex);
     if (pro && nvmtl_pre_submit_hook) {
@@ -5790,7 +5814,6 @@ int nvmtl_vk_submit_begin_at(nvk_cmdbuf *c, nvmtl_inflight *f, const char *who)
         nvlog("vk: queue submit -> %d; disabling backend and retaining uncertain in-flight resources", result);
         return -2;
     }
-    f->fence = fence;
     return 0;
 }
 int nvmtl_vk_submit_finish(nvmtl_inflight *f)

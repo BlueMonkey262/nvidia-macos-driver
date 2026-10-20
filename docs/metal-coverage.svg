@@ -4,8 +4,8 @@
 <rect x="240" y="36" width="12" height="12" fill="#2fa6a0"/><text x="257" y="47" font-size="12" fill="#c9ced8">Apple's code, not ours (33)</text>
 <rect x="460" y="36" width="12" height="12" fill="#dc2626"/><text x="477" y="47" font-size="12" fill="#c9ced8">Very slow (11)</text>
 <rect x="589" y="36" width="12" height="12" fill="#eab308"/><text x="606" y="47" font-size="12" fill="#c9ced8">Needs improvement (108)</text>
-<rect x="781" y="36" width="12" height="12" fill="#22a559"/><text x="798" y="47" font-size="12" fill="#c9ced8">Works great (496)</text>
-<rect x="931" y="36" width="12" height="12" fill="#9333ea"/><text x="948" y="47" font-size="12" fill="#c9ced8">Differs from Apple (27)</text>
+<rect x="781" y="36" width="12" height="12" fill="#22a559"/><text x="798" y="47" font-size="12" fill="#c9ced8">Works great (494)</text>
+<rect x="931" y="36" width="12" height="12" fill="#9333ea"/><text x="948" y="47" font-size="12" fill="#c9ced8">Differs from Apple (29)</text>
 <rect x="1123" y="36" width="12" height="12" fill="#4f78c4"/><text x="1140" y="47" font-size="12" fill="#c9ced8">Not yet rated (0)</text>
 <g><title>MTLRenderCommandEncoder: Not implemented or stub 30, Very slow 4, Needs improvement 23, Works great 75, Differs from Apple 4</title>
 <rect x="1.00" y="63.00" width="26.07" height="25.90" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
@@ -376,11 +376,11 @@
 <rect x="340.95" y="264.50" width="181.13" height="182.65" fill="none" stroke="#0f1218" stroke-width="2"/>
 <text x="345.95" y="279.50" font-size="12" font-weight="700" fill="#fff" stroke="#0f1218" stroke-width="3" paint-order="stroke">ComputeCommandEncoder</text>
 </g>
-<g><title>MTLCommandBuffer: Not implemented or stub 7, Needs improvement 4, Works great 26, Differs from Apple 2</title>
+<g><title>MTLCommandBuffer: Not implemented or stub 7, Needs improvement 4, Works great 24, Differs from Apple 4</title>
 <rect x="341.95" y="448.15" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="367.54" y="448.15" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="393.14" y="448.15" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="418.73" y="448.15" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="418.73" y="448.15" width="25.59" height="25.48" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="444.32" y="448.15" width="25.59" height="25.48" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="469.91" y="448.15" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="495.50" y="448.15" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
@@ -398,7 +398,7 @@
 <rect x="444.32" y="499.10" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="469.91" y="499.10" width="25.59" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="495.50" y="499.10" width="25.59" height="25.48" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
-<rect x="341.95" y="524.57" width="29.86" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
+<rect x="341.95" y="524.57" width="29.86" height="25.48" fill="#9333ea" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="371.81" y="524.57" width="29.86" height="25.48" fill="#22a559" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="401.67" y="524.57" width="29.86" height="25.48" fill="#6b7280" stroke="#0f1218" stroke-width="0.5"/>
 <rect x="431.52" y="524.57" width="29.86" height="25.48" fill="#eab308" stroke="#0f1218" stroke-width="0.5"/>

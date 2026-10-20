@@ -809,14 +809,14 @@
    "status": "differs"
   },
   "kernelEndTime": {
-   "evidence": "tested: tools/test_metal_kernel_timing.m passes on the RTX 2060 Super VM (fails on the previous plugin)",
-   "note": "CPU scheduling end, never earlier than the start. First command-buffer part only; CPU scheduling window, not GPU time.",
-   "status": "great"
+   "evidence": "tested: tools/test_metal_kernel_timing.m passes on the RTX 2060 Super VM (fails on the previous plugin); it differs from Apple because the interval is the CPU scheduling window of the first part only",
+   "note": "CPU scheduling end of the first submission part only, readable in scheduled handlers; zero on error. Does not cover the whole multipart buffer; use GPUStartTime/GPUEndTime for GPU timing.",
+   "status": "differs"
   },
   "kernelStartTime": {
-   "evidence": "tested: tools/test_metal_kernel_timing.m passes on the RTX 2060 Super VM (fails on the previous plugin)",
-   "note": "CPU scheduling start, readable in a scheduled handler. First command-buffer part only; this is the CPU scheduling window, not GPU time (GPUStartTime/GPUEndTime are the GPU times).",
-   "status": "great"
+   "evidence": "tested: tools/test_metal_kernel_timing.m passes on the RTX 2060 Super VM (fails on the previous plugin); it differs from Apple because the interval is the CPU scheduling window of the first part only",
+   "note": "CPU scheduling start of the first submission part only, readable in scheduled handlers; zero on error. Does not cover the whole multipart buffer; use GPUStartTime/GPUEndTime for GPU timing.",
+   "status": "differs"
   },
   "label": {
    "evidence": "read from source: plugin/NVMTLObjects.m:5102 (model-reviewed, not tested)",
@@ -2534,8 +2534,8 @@
    "status": "great"
   },
   "newFunctionWithDescriptor:completionHandler:": {
-   "evidence": "read from source: plugin/NVMTLObjects.m:2504 (model-reviewed, not tested)",
-   "note": "Calls the sync descriptor path then the handler; still ignores descriptor options beyond name/constants.",
+   "evidence": "read from source: plugin/NVMTLObjects.m newFunctionWithDescriptor:completionHandler:; expanded tools/test_metal_async_specialize.m not built or VM-tested",
+   "note": "Copies the descriptor and performs creation and callback off the caller; FC translator entry shares a leaf mutex with sync callers. Other descriptor limitations remain.",
    "status": "improve"
   },
   "newFunctionWithDescriptor:error:": {
@@ -2550,7 +2550,7 @@
   },
   "newFunctionWithName:constantValues:completionHandler:": {
    "evidence": "tested: tools/test_metal_async_specialize.m passes on the RTX 2060 Super VM (fails on the previous plugin)",
-   "note": "Specializes off the caller thread and calls the handler once.",
+   "note": "Specializes off the caller thread and calls the handler once. FC translator entry now shares a leaf mutex with sync/variant callers (read from source); expanded concurrent/snapshot/error probe not built or VM-tested.",
    "status": "great"
   },
   "newFunctionWithName:constantValues:error:": {
