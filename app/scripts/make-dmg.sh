@@ -67,7 +67,7 @@ NAME=$(basename "$APP" .app)
 VOL="NVIDIA Card Control"
 DMG="$OUT/NVIDIA-Card-Control-$VERSION$SUFFIX.dmg"
 STAGE=$(mktemp -d "${TMPDIR:-/tmp}/nvcc-dmg.XXXXXX")
-trap 'rm -rf "$STAGE"' EXIT
+trap 'rm -rf "$STAGE" "$STAGE.rw.dmg"' EXIT
 
 echo "app:     $APP"
 echo "version: $VERSION${CONF:+ ($CONF)}"
@@ -90,7 +90,53 @@ TXT
 
 mkdir -p "$OUT"
 rm -f "$DMG"
-hdiutil create -volname "$VOL" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+
+# Window layout: README on the left, the app in the middle, the Applications shortcut on the right, an arrow
+# between the last two. Finder records icon positions and the background in the volume's .DS_Store, and the only way
+# to make it do that is to drive Finder with AppleScript on a mounted read-write copy. The first time, macOS asks
+# whether Terminal / Xcode may control Finder (System Settings > Privacy & Security > Automation). If that fails or
+# times out, the image is still built, just without the layout.
+HERE=$(cd "$(dirname "$0")" && pwd)
+BG="$HERE/dmg-background.png"
+LAYOUT=0
+if [ -f "$BG" ]; then
+  mkdir -p "$STAGE/.background"; cp "$BG" "$STAGE/.background/background.png"; chflags hidden "$STAGE/.background"
+fi
+RW="$STAGE.rw.dmg"
+SIZE_KB=$(( $(du -sk "$STAGE" | cut -f1) + 4096 ))
+[ -d "/Volumes/$VOL" ] && hdiutil detach "/Volumes/$VOL" -force >/dev/null 2>&1 || true
+hdiutil create -srcfolder "$STAGE" -volname "$VOL" -fs HFS+ -format UDRW -size ${SIZE_KB}k -ov "$RW" >/dev/null
+MNT=$(hdiutil attach -readwrite -noverify -noautoopen -mountpoint "/Volumes/$VOL" "$RW" 2>/dev/null | tail -1 | cut -f3)
+if [ -n "$MNT" ] && [ -f "$BG" ]; then
+  if perl -e 'alarm 120; exec @ARGV' osascript >/dev/null 2>&1 <<OSA
+tell application "Finder"
+  tell disk "$VOL"
+    open
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set the bounds of container window to {200, 120, 840, 570}
+    set theOptions to the icon view options of container window
+    set arrangement of theOptions to not arranged
+    set icon size of theOptions to 96
+    set text size of theOptions to 13
+    set background picture of theOptions to file ".background:background.png"
+    set position of item "READ ME FIRST.txt" of container window to {100, 180}
+    set position of item "$NAME.app" of container window to {300, 180}
+    set position of item "Applications" of container window to {500, 180}
+    update without registering applications
+    delay 2
+    close
+  end tell
+end tell
+OSA
+  then LAYOUT=1; else echo "make-dmg: could not drive Finder for the window layout (allow it in Privacy & Security > Automation); building a plain image"; fi
+fi
+sync
+[ -n "$MNT" ] && { bless --folder "$MNT" --openfolder "$MNT" >/dev/null 2>&1 || true; hdiutil detach "$MNT" >/dev/null 2>&1 || hdiutil detach "$MNT" -force >/dev/null 2>&1; }
+hdiutil convert "$RW" -format UDZO -imagekey zlib-level=9 -o "$DMG" >/dev/null
+rm -f "$RW"
+echo "layout:  $([ $LAYOUT = 1 ] && echo applied || echo "not applied")"
 ( cd "$OUT" && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256" )
 echo "image:   $DMG"
 cat "$DMG.sha256"
