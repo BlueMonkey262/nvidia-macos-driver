@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build a disk image for NVIDIA Card Control from a built .app and put it in builds/ next to the project.
+# Build a disk image for GPU Control from a built .app and put it in builds/ next to the project.
 #
 # From Xcode (recommended): Product > Scheme > Edit Scheme > Archive > Post-actions > + > New Run Script Action,
 # "Provide build settings from" the app target, and the script
@@ -14,7 +14,7 @@
 # By hand:  make-dmg.sh [--any-config] [PATH-TO-APP] [OUTPUT-DIR]
 # With no PATH-TO-APP it uses the most recent build of this project: the newest app among Xcode's DerivedData
 # builds (Debug and Release), Xcode's archives, and the dot-app-builds folder next to builds/ (archives or apps). The image is unsigned: users open the app with right-click >
-# Open the first time (the README inside says how). Output: builds/NVIDIA-Card-Control-<version>.dmg (+ .sha256).
+# Open the first time (the README inside says how). Output: builds/GPU-Control-<version>.dmg (+ .sha256).
 # Copyright (c) 2026 BlueMonkey
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 set -eu
@@ -65,8 +65,8 @@ fi
 SUFFIX=""; [ "$CONF" = "Debug" ] && SUFFIX="-debug"
 
 NAME=$(basename "$APP" .app)
-VOL="NVIDIA Card Control"
-DMG="$OUT/NVIDIA-Card-Control-$VERSION$SUFFIX.dmg"
+VOL="GPU Control"
+DMG="$OUT/GPU-Control-$VERSION$SUFFIX.dmg"
 STAGE=$(mktemp -d "${TMPDIR:-/tmp}/nvcc-dmg.XXXXXX")
 trap 'rm -rf "$STAGE" "$STAGE.rw.dmg"' EXIT
 
@@ -75,18 +75,19 @@ echo "version: $VERSION${CONF:+ ($CONF)}"
 echo "archs:   $(lipo -archs "$APP/Contents/MacOS/$NAME" 2>/dev/null || echo unknown)"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-cat > "$STAGE/READ ME FIRST.txt" <<'TXT'
-NVIDIA Card Control: a control panel for the NVIDIA Metal driver on macOS (experimental, community fork).
+cat > "$STAGE/READ ME FIRST.txt" <<TXT
+GPU Control: a control panel for the NVIDIA Metal driver on macOS (unofficial, experimental, community fork).
+Not affiliated with or endorsed by NVIDIA or NullMoth Systems.
 
 Install: drag the app onto Applications.
 
 First launch: this app is not signed by an Apple Developer ID, so macOS will say it cannot verify the developer.
 Right-click the app, choose Open, then Open again. You only need to do this once. If the app was downloaded
-and still will not open, run:  xattr -dr com.apple.quarantine "/Applications/NVIDIA Card Control.app"
+and still will not open, run:  xattr -dr com.apple.quarantine "/Applications/$NAME.app"
 
 It changes driver settings and clears caches with an administrator prompt; it never sends anything anywhere.
 
-License: PolyForm Noncommercial 1.0.0 (source-available, noncommercial).
+License: PolyForm Noncommercial 1.0.0 (source-available, noncommercial). Copyright (c) 2026 BlueMonkey.
 TXT
 
 mkdir -p "$OUT"
