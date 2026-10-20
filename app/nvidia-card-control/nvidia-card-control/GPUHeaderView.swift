@@ -73,6 +73,7 @@ nonisolated enum GPUFanLayout {
 struct GPUHeaderView: View {
     let gpuName: String
     let telemetry: GPUTelemetry
+    var isStale = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -86,18 +87,42 @@ struct GPUHeaderView: View {
                 .font(.title3.weight(.semibold))
 
             HStack(spacing: 12) {
-                tile("Temperature", value: telemetry.temperatureC.map { "\(Int($0.rounded())) °C" })
-                tile("Fan", value: fanText)
-                tile("Core clock", value: telemetry.coreClockMHz.map { "\($0) MHz" })
-                tile("Power", value: telemetry.powerWatts.map { "\(Int($0.rounded())) W" })
+                tile(
+                    String(localized: "Temperature"),
+                    value: telemetry.temperatureC.map { "\(Int($0.rounded())) °C" },
+                    help: telemetry.temperatureCoreC.helpReason
+                )
+                tile(String(localized: "Fan"), value: fanText, help: fanHelp)
+                tile(
+                    String(localized: "Core clock"),
+                    value: telemetry.coreClockMHz.map { "\($0) MHz" },
+                    help: telemetry.clockGraphicsMHz.helpReason
+                )
+                tile(
+                    String(localized: "Power"),
+                    value: telemetry.powerWatts.map { "\(Int($0.rounded())) W" },
+                    help: powerHelp
+                )
             }
+            .opacity(isStale ? 0.55 : 1)
+
+            if isStale {
+                Text("Telemetry sample is stale")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(String(localized: "Telemetry sample is stale"))
+            }
+
+            videoMemoryRow
+            linkAndStateRow
+            processList
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
     }
 
     private var fanText: String? {
-        switch (telemetry.fanRPM, telemetry.fanPercent) {
+        switch (telemetry.fanRPM, telemetry.fanPercentValue) {
         case let (rpm?, percent?): return "\(rpm) rpm (\(percent)%)"
         case let (rpm?, nil): return "\(rpm) rpm"
         case let (nil, percent?): return "\(percent)%"
@@ -105,7 +130,160 @@ struct GPUHeaderView: View {
         }
     }
 
-    private func tile(_ title: LocalizedStringKey, value: String?) -> some View {
+    private var fanHelp: String? {
+        if telemetry.fanRPM != nil || telemetry.fanPercentValue != nil { return nil }
+        return telemetry.fanRPMSlots.helpReason ?? telemetry.fanPercent.helpReason
+    }
+
+    private var powerHelp: String? {
+        if telemetry.powerWatts != nil { return nil }
+        return telemetry.powerDrawW.helpReason ?? telemetry.powerAverageW.helpReason
+    }
+
+    @ViewBuilder
+    private var videoMemoryRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Video memory")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let used = telemetry.vramUsedBytes.value, let total = telemetry.vramTotalBytes.value, total > 0 {
+                ProgressView(value: Double(used), total: Double(total))
+                    .accessibilityLabel(String(localized: "Video memory"))
+                    .accessibilityValue(String(localized: "\(byteString(used)) of \(byteString(total))"))
+                HStack {
+                    Text("\(byteString(used)) / \(byteString(total))")
+                        .font(.callout.monospacedDigit())
+                    Spacer()
+                    if let free = telemetry.vramFreeBytes.value {
+                        Text("Free \(byteString(free))")
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Text("—")
+                    .font(.headline.monospacedDigit())
+                    .help(telemetry.vramUsedBytes.helpReason ?? telemetry.vramTotalBytes.helpReason ?? String(localized: "Unavailable"))
+            }
+
+            Text(bar1Summary)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .help(bar1Help ?? String(localized: "BAR1 aperture usage"))
+                .accessibilityLabel(String(localized: "BAR1 \(bar1Summary)"))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var bar1Summary: String {
+        if let used = telemetry.bar1UsedBytes.value, let total = telemetry.bar1TotalBytes.value {
+            var parts = [String(localized: "BAR1 \(byteString(used)) of \(byteString(total))")]
+            if let free = telemetry.bar1FreeBytes.value {
+                parts.append(String(localized: "free \(byteString(free))"))
+            }
+            return parts.joined(separator: " · ")
+        }
+        return String(localized: "BAR1 —")
+    }
+
+    private var bar1Help: String? {
+        if telemetry.bar1UsedBytes.value != nil { return nil }
+        return telemetry.bar1UsedBytes.helpReason ?? telemetry.bar1TotalBytes.helpReason
+    }
+
+    @ViewBuilder
+    private var linkAndStateRow: some View {
+        HStack(spacing: 12) {
+            labeledValue(
+                String(localized: "PCIe link"),
+                value: pcieText,
+                help: telemetry.pcieGeneration.helpReason ?? telemetry.pcieWidth.helpReason
+            )
+            labeledValue(
+                String(localized: "Performance state"),
+                value: telemetry.performanceState.value,
+                help: telemetry.performanceState.helpReason
+            )
+        }
+    }
+
+    private var pcieText: String? {
+        switch (telemetry.pcieGeneration.value, telemetry.pcieWidth.value) {
+        case let (gen?, width?): return "Gen \(gen) ×\(width)"
+        case let (gen?, nil): return "Gen \(gen)"
+        case let (nil, width?): return "×\(width)"
+        default: return nil
+        }
+    }
+
+    @ViewBuilder
+    private var processList: some View {
+        DisclosureGroup {
+            if let rows = telemetry.processVRAM.value {
+                let top = rows.sorted { $0.reportedBytes > $1.reportedBytes }.prefix(10)
+                if top.isEmpty {
+                    Text("No processes reported")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(top)) { row in
+                        processRow(row)
+                    }
+                }
+            } else {
+                Text("—")
+                    .font(.body.monospacedDigit())
+                    .help(telemetry.processVRAM.helpReason ?? String(localized: "Unavailable"))
+            }
+        } label: {
+            Text("Processes using video memory")
+                .font(.body)
+        }
+        .accessibilityLabel(String(localized: "Processes using video memory"))
+    }
+
+    private func processRow(_ row: ProcessVRAMUsage) -> some View {
+        let name = ProcessNameLookup.name(forPID: row.pid)
+        let sizeText = row.vramErrorHelp == nil ? byteString(row.reportedBytes) : "—"
+        return HStack {
+            Text(name)
+                .lineLimit(1)
+            Spacer()
+            Text("PID \(row.pid)")
+                .foregroundStyle(.secondary)
+            Text(sizeText)
+                .font(.body.monospacedDigit())
+                .help(row.vramErrorHelp ?? String(localized: "Reported private and shared video memory"))
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            row.vramErrorHelp == nil
+                ? String(localized: "\(name), PID \(row.pid), \(sizeText)")
+                : String(localized: "\(name), PID \(row.pid), unavailable")
+        )
+    }
+
+    private func labeledValue(_ title: String, value: String?, help: String?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value ?? "—")
+                .font(.headline.monospacedDigit())
+                .help(value == nil ? (help ?? String(localized: "Unavailable")) : "")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title), \(value ?? String(localized: "Unavailable"))")
+    }
+
+    private func tile(_ title: String, value: String?, help: String?) -> some View {
         VStack(spacing: 4) {
             Text(title)
                 .font(.caption)
@@ -114,11 +292,17 @@ struct GPUHeaderView: View {
                 .font(.headline.monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .help(value == nil ? (help ?? String(localized: "Unavailable")) : "")
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title), \(value ?? String(localized: "Unavailable"))")
+    }
+
+    private func byteString(_ bytes: UInt64) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .memory)
     }
 }
 

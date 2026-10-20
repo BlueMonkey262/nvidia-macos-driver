@@ -81,6 +81,13 @@ actor NvmtlCtl {
         return try JSONDecoding.decodeStatus(fromUTF8: result.stdout)
     }
 
+    /// Read-only RM metrics via `nvmtlctl telemetry --json` (needs `gpu_telemetry` next to the CLI). No root.
+    func telemetry(timeout: TimeInterval = 20) async throws -> GPUTelemetry {
+        let result = try await run(arguments: ["telemetry", "--json"], asRoot: false, timeout: timeout)
+        try throwIfFailed(result)
+        return try JSONDecoding.decodeTelemetry(fromUTF8: result.stdout)
+    }
+
     func confList() async throws -> [ConfEntry] {
         let result = try await run(arguments: ["conf", "list", "--json"], asRoot: false)
         try throwIfFailed(result)

@@ -12,5 +12,6 @@ __pycache__/
 *.pem
 id_*
 
-# Locally built telemetry helper.
+# Locally built telemetry helper (tools output and optional app-bundle copy).
 /tools/gpu_telemetry
+/app/nvidia-card-control/nvidia-card-control/gpu_telemetry

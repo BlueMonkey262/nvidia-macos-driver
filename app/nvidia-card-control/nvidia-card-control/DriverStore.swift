@@ -9,8 +9,11 @@ import Observation
 @Observable
 final class DriverStore {
     private(set) var status: DriverStatus?
-    /// Filled in once `nvmtlctl telemetry` exists; until then every tile shows a dash.
+    /// Last good `nvmtlctl telemetry` sample; tiles show dashes until the first success.
     private(set) var telemetry: GPUTelemetry = .unavailable
+    /// When the last good telemetry sample arrived; used for the 5 s stale mark.
+    private(set) var telemetrySampleDate: Date?
+    private(set) var isTelemetryStale = false
     private(set) var confEntries: [ConfEntry] = []
     private(set) var cachesStatus: CachesStatus?
     private(set) var toolPath: String?
@@ -30,6 +33,11 @@ final class DriverStore {
     }
 
     private let ctl: NvmtlCtl
+    private var telemetryPollTask: Task<Void, Never>?
+    private var telemetryRequestInFlight = false
+
+    private static let telemetryStaleAfter: TimeInterval = 5
+    private static let telemetryPollInterval: Duration = .seconds(1)
 
     init(ctl: NvmtlCtl = NvmtlCtl()) {
         self.ctl = ctl
@@ -157,6 +165,52 @@ final class DriverStore {
         lastNoticeMessage = nil
     }
 
+    /// 1 Hz telemetry while the Status page is visible. One request in flight; missed ticks are skipped.
+    func startTelemetryPolling() {
+        stopTelemetryPolling()
+        telemetryPollTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                await self.pollTelemetryTick()
+                try? await Task.sleep(for: Self.telemetryPollInterval)
+            }
+        }
+    }
+
+    func stopTelemetryPolling() {
+        telemetryPollTask?.cancel()
+        telemetryPollTask = nil
+        telemetryRequestInFlight = false
+        refreshTelemetryStaleFlag()
+    }
+
+    private func pollTelemetryTick() async {
+        refreshTelemetryStaleFlag()
+        guard !telemetryRequestInFlight else { return }
+        telemetryRequestInFlight = true
+        defer { telemetryRequestInFlight = false }
+
+        do {
+            let sample = try await ctl.telemetry()
+            telemetry = sample
+            telemetrySampleDate = Date()
+            isTelemetryStale = false
+        } catch is CancellationError {
+            return
+        } catch {
+            // Keep the last good sample; surface age via isTelemetryStale only.
+            refreshTelemetryStaleFlag()
+        }
+    }
+
+    private func refreshTelemetryStaleFlag() {
+        guard let telemetrySampleDate else {
+            isTelemetryStale = false
+            return
+        }
+        isTelemetryStale = Date().timeIntervalSince(telemetrySampleDate) > Self.telemetryStaleAfter
+    }
+
     private func performWrite(action: BusyAction, work: () async throws -> Void) async {
         guard busyAction == nil else { return }
         busyAction = action
@@ -208,6 +262,9 @@ extension DriverStore {
 
     fileprivate func applyPreviewData() {
         status = .previewSample
+        telemetry = .previewSample
+        telemetrySampleDate = Date()
+        isTelemetryStale = false
         confEntries = ConfEntry.previewSamples
         cachesStatus = .previewSample
         toolPath = NvmtlCtl.systemToolPath

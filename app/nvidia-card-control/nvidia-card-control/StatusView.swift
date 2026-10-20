@@ -16,7 +16,11 @@ struct StatusView: View {
                 }
             } else if let status = store.status {
                 Section {
-                    GPUHeaderView(gpuName: status.gpu, telemetry: store.telemetry)
+                    GPUHeaderView(
+                        gpuName: store.telemetry.gpuName.value ?? status.gpu,
+                        telemetry: store.telemetry,
+                        isStale: store.isTelemetryStale
+                    )
                 }
                 .listRowBackground(Color.clear)
                 healthSection(status)
@@ -48,6 +52,12 @@ struct StatusView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Status")
+        .task {
+            store.startTelemetryPolling()
+        }
+        .onDisappear {
+            store.stopTelemetryPolling()
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {

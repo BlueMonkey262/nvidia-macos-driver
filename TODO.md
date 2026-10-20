@@ -30,10 +30,10 @@ Only open problems are listed here. What has been fixed and measured is in [docs
 ## Telemetry
 
 `tools/gpu_telemetry.m` and `nvmtlctl telemetry --json` provide an r610 read-only probe (read from source; not built or card-tested).
-Build against NVIDIA 610.57.04 headers using the command in the probe. Run `tools/test_metal_telemetry.m` on macOS.
+Build against NVIDIA 610.57.04 headers with `app/scripts/build-telemetry.sh` (or the clang line in that script). Run `tools/test_metal_telemetry.m` on macOS.
 RUSD cached fan RPM/power/clocks/utilisation require firmware data already being published; freshness is unverified.
 Fan percent, hotspot, normalized maximum clocks and the macOS per-PID user-client quota count need further ABI work.
-The SwiftUI consumer and plugin stats publication are design-only; see the telemetry research report in `.scratch/agents/`.
+The Status page polls `nvmtlctl telemetry --json` at 1 Hz while visible (value-or-error tiles; no fabricated zeros). Plugin stats publication remains design-only; see the telemetry research report in `.scratch/agents/`.
 
 ## Work queue
 

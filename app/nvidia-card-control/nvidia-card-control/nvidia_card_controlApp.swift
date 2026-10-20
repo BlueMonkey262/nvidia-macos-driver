@@ -11,6 +11,12 @@ struct nvidia_card_controlApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(store: store)
+                #if DEBUG
+                .onAppear {
+                    let failures = GPUTelemetryDecodingCheck.failures()
+                    assert(failures.isEmpty, "GPUTelemetry decode self-check failed: \(failures)")
+                }
+                #endif
         }
         .commands {
             CommandGroup(replacing: .newItem) {}

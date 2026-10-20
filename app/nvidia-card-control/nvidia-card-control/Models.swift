@@ -155,6 +155,10 @@ nonisolated enum JSONDecoding {
         }
         return try decodeCachesStatus(from: data)
     }
+
+    static func decodeTelemetry(fromUTF8 string: String) throws -> GPUTelemetry {
+        try GPUTelemetryJSON.decode(fromUTF8: string)
+    }
 }
 
 nonisolated extension DriverStatus {
