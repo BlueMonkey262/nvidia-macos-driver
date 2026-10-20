@@ -146,7 +146,7 @@ nonisolated enum TestHelpers {
     }
 }
 
-extension JSONDecoding {
+nonisolated extension JSONDecoding {
     static func decodeTestList(from data: Data) throws -> [TestDefinition] {
         try decoder.decode([TestDefinition].self, from: data)
     }
@@ -187,7 +187,7 @@ extension JSONDecoding {
     }
 }
 
-extension TestDefinition {
+nonisolated extension TestDefinition {
     static let previewSamples: [TestDefinition] = [
         TestDefinition(
             id: "encode-h264",
@@ -251,7 +251,7 @@ extension TestDefinition {
     ]
 }
 
-extension TestRunResult {
+nonisolated extension TestRunResult {
     static let previewSample = TestRunResult(
         id: "encode-h264",
         status: .pass,

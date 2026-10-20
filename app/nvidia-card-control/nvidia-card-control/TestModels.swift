@@ -53,7 +53,7 @@ nonisolated struct TestParamSpec: Equatable, Identifiable, Sendable {
     }
 }
 
-extension TestParamSpec: Codable {
+nonisolated extension TestParamSpec: Codable {
     enum CodingKeys: String, CodingKey {
         case key, label, type, choices, min, max
         case defaultValue = "default"

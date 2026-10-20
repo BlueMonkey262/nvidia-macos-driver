@@ -122,7 +122,7 @@ enum StreamPatternRenderer {
             .yellow,
             .cyan,
             .green,
-            .magenta,
+            Color(red: 1, green: 0, blue: 1),
             .red,
             .blue,
             Color(white: 0.2),
