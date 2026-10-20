@@ -123,6 +123,36 @@ actor NvmtlCtl {
         return result.combinedMessage
     }
 
+    func testList() async throws -> [TestDefinition] {
+        let result = try await run(arguments: TestHelpers.listArguments(), asRoot: false)
+        try throwIfFailed(result)
+        return try JSONDecoding.decodeTestList(fromUTF8: result.stdout)
+    }
+
+    /// Runs one test. Exit code 0 still returns a decoded result when the test itself failed.
+    func testRun(
+        id: String,
+        params: [String: String],
+        asRoot: Bool,
+        timeout: TimeInterval
+    ) async throws -> TestRunResult {
+        let arguments = TestHelpers.runArguments(testID: id, params: params)
+        let result = try await run(arguments: arguments, asRoot: asRoot, timeout: timeout)
+        try throwIfFailed(result)
+        return try JSONDecoding.decodeTestRunResult(fromUTF8: result.stdout)
+    }
+
+    /// Runs every available test. Exit code 0 still returns per-test fail/skip/error rows.
+    func testRunAll(asRoot: Bool, timeout: TimeInterval) async throws -> [TestRunResult] {
+        let result = try await run(
+            arguments: TestHelpers.runAllArguments(),
+            asRoot: asRoot,
+            timeout: timeout
+        )
+        try throwIfFailed(result)
+        return try JSONDecoding.decodeTestRunResults(fromUTF8: result.stdout)
+    }
+
     func run(
         arguments: [String],
         asRoot: Bool,
