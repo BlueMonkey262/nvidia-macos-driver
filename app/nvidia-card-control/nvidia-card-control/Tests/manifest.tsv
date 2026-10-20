@@ -1,0 +1,15 @@
+# nvmtl-tests-v1; tab-separated records, see README.md
+T	encode-h264	H.264 encode	Video encode	Hardware H.264 encode at the chosen size and pattern; checks every frame decodes and reports PSNR, bitrate and latency.	15	encode	nvenc_matrix
+P	encode-h264	size	Size	choice	1080p	720p,1080p,1440p	-	-
+P	encode-h264	pattern	Pattern	choice	motion	static,motion,edges,noise,cuts	-	-
+P	encode-h264	bitrate_mbps	Bitrate (Mbit/s)	int	8	-	1	100
+P	encode-h264	seconds	Length (s)	int	6	-	2	60
+T	encode-hevc	HEVC encode	Video encode	Hardware HEVC encode at the chosen size and pattern; checks every frame decodes and reports PSNR, bitrate and latency.	15	encode	nvenc_matrix
+P	encode-hevc	size	Size	choice	1080p	720p,1080p,1440p	-	-
+P	encode-hevc	pattern	Pattern	choice	motion	static,motion,edges,noise,cuts	-	-
+P	encode-hevc	bitrate_mbps	Bitrate (Mbit/s)	int	8	-	1	100
+P	encode-hevc	seconds	Length (s)	int	6	-	2	60
+T	encoder-bringup	Encoder bring-up	Video encode	Open a hardware 1080p encoder session and encode one frame.	2	bringup	encoder_bringup
+P	encoder-bringup	codec	Codec	choice	h264	h264,hevc	-	-
+T	gpu-compute	GPU compute	Metal	Run a compute kernel over 4096 items and verify every result.	2	program	gpu_compute_check
+T	metal-suite	Metal suite	Metal	Run every bundled test_metal_* program and report each result.	30	suite	test_metal_*
