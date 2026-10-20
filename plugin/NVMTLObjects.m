@@ -414,22 +414,23 @@ static void nvmtl_res2_kick(int scan) {
 }
 extern int nvmtl_vk_mig_batch_begin(void); extern int nvmtl_vk_mig_batch_end(void);
 static int gRes2Batching;
-typedef struct { __unsafe_unretained NVMTLTexture *t; nvk_image old; } nvmtl_pend_t;
+typedef struct { CFTypeRef t; nvk_image old; } nvmtl_pend_t;
 static nvmtl_pend_t *gPend; static unsigned gPendN, gPendCap; static uint64_t gBatchN, gBatchMoves;
 static void nvmtl_grave_put(const nvk_image *old);
 static void nvmtl_res2_batch_end(void);
 static void nvmtl_res2_pend(NVMTLTexture *t, const nvk_image *old) {
     if (gPendN == gPendCap) { unsigned c = gPendCap ? gPendCap * 2 : 128; nvmtl_pend_t *n = realloc(gPend, c * sizeof *n); if (n) { gPend = n; gPendCap = c; } }
-    // The batch ends after the caller's @synchronized(t) has been left, so the game can drop its last reference in
-    // between. Hold the texture until batch_end has cleared _rstate.
-    if (gPendN < gPendCap) { gPend[gPendN].t = (__bridge NVMTLTexture *)CFBridgingRetain(t); gPend[gPendN].old = *old; gPendN++; }
+    // Give the batch its own retain until batch_end clears _rstate. The current pager's strong snapshots also
+    // hold these textures; the batch retain makes its ownership independent of those snapshots.
+    if (gPendN < gPendCap) { gPend[gPendN].t = CFBridgingRetain(t); gPend[gPendN].old = *old; gPendN++; }
     else { nvmtl_res2_batch_end(); nvmtl_grave_put(old); __atomic_store_n(&t->_rstate, 0, __ATOMIC_RELEASE); }
     if (gPendN >= 128) { nvmtl_res2_batch_end(); nvmtl_vk_mig_batch_begin(); }
 }
 static void nvmtl_res2_batch_end(void) {
     (void)nvmtl_vk_mig_batch_end();
-    for (unsigned k = 0; k < gPendN; k++) { nvmtl_grave_put(&gPend[k].old); __atomic_store_n(&gPend[k].t->_rstate, 0, __ATOMIC_RELEASE); }
-    for (unsigned k = 0; k < gPendN; k++) CFRelease((__bridge CFTypeRef)gPend[k].t);
+    for (unsigned k = 0; k < gPendN; k++) { NVMTLTexture *t = (__bridge NVMTLTexture *)gPend[k].t;
+        nvmtl_grave_put(&gPend[k].old); __atomic_store_n(&t->_rstate, 0, __ATOMIC_RELEASE); }
+    for (unsigned k = 0; k < gPendN; k++) CFRelease(gPend[k].t);
     if (gPendN) { gBatchN++; gBatchMoves += gPendN;
         static unsigned said; if (said++ < 4 || said % 256 == 0) nvlog("residency (res2): evict-batch %llu: %u textures copied in ONE submission (%llu moves in %llu batches)",
             (unsigned long long)gBatchN, gPendN, (unsigned long long)gBatchMoves, (unsigned long long)gBatchN); }
