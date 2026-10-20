@@ -2,14 +2,13 @@
 """Check the optional --direct-row and --short-zero patches against the 2.2.0 H.264 encoder.
 
 The library is not in this repo. Set NVENC_H264_LIB to its path. Exit 77 when that
-file is missing. Stdlib only, plus objdump when it is on PATH.
+file is missing. The cave bytes are decoded by make_nvenc_t2d.py (no objdump).
 
 usage: NVENC_H264_LIB=/path/to/libnvenc_h264.dylib python3 tools/test_h264_perf_patch.py
 """
 import hashlib
 import importlib.util
 import os
-import shutil
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -85,30 +84,28 @@ def windows(kind):
     fail(kind)
 
 
-def rows_of(image, start, stop):
-    if not shutil.which("objdump"):
-        return None
-    rows, _ = nv.disassemble(bytes(image[start:stop]), start)
-    for addr, _raw, mnem, _ops in rows:
-        if mnem in ("(bad)", ""):
-            fail(f"objdump could not decode {addr:#x}")
-    return [(a, m, o) for a, _r, m, o in rows if start <= a < stop]
+# Bytes at the direct-row landing pads. The caves jump here; these are the original instructions.
+LANDING = (
+    (nv.LUMA_RESUME_CONT, bytes.fromhex("c1e004")),          # shl eax, 4
+    (nv.CHROMA_RESUME_CONT, bytes.fromhex("c1e003")),        # shl eax, 3
+    (nv.LUMA_TILE, bytes.fromhex("4c8b8d38fdffff")),         # mov r9, [rbp-0x2c8]
+    (nv.CHROMA_TILE, bytes.fromhex("83bd30fdffff00")),       # cmp dword [rbp-0x2d0], 0
+)
 
 
 def check_transfers(image, start, stop, allow):
-    rows = rows_of(image, start, stop)
-    if rows is None:
-        print("objdump missing; decode check skipped")
-        return
-    starts = {a for a, _, _ in rows}
-    for addr, mnem, ops in rows:
-        if not (mnem.startswith("j") or mnem == "call"):
+    blob = bytes(image[start:stop])
+    rows = nv.decode(blob, start)
+    if b"".join(insn.raw for insn in rows) != blob:
+        fail(f"decoder did not cover the cave at {start:#x}")
+    starts = {insn.addr for insn in rows}
+    for insn in rows:
+        if not (insn.mnem.startswith("j") or insn.mnem == "call"):
             continue
-        tgt = nv._abs_target(ops)
-        if tgt is None:
-            fail(f"no target on {mnem} at {addr:#x}: {ops}")
-        if tgt not in starts and tgt not in allow:
-            fail(f"{mnem} at {addr:#x} -> {tgt:#x}, not an instruction start")
+        if insn.target is None:
+            fail(f"no target on {insn.mnem} at {insn.addr:#x}")
+        if insn.target not in starts and insn.target not in allow:
+            fail(f"{insn.mnem} at {insn.addr:#x} -> {insn.target:#x}, not an instruction start")
 
 
 def check_locked_bytes(image):
@@ -174,19 +171,14 @@ def main():
 
     allow = {nv.LUMA_TILE, nv.LUMA_AFTER_COPY, nv.MEMCPY, nv.CHROMA_TILE, nv.CHROMA_AFTER_COPY,
              nv.LUMA_RESUME_CONT, nv.CHROMA_RESUME_CONT}
-    if shutil.which("objdump"):
-        check_transfers(both, nv.DIRECT_AT[0], nv.DIRECT_AT[0] + len(LUMA_DIRECT), allow)
-        check_transfers(both, nv.DIRECT_AT[1], nv.DIRECT_AT[1] + len(CHROMA_DIRECT), allow)
-        check_transfers(both, nv.DIRECT_AT[2],
-                        nv.DIRECT_AT[2] + len(LUMA_RESTORE) + len(CHROMA_RESTORE), allow)
-        for at, mnem in ((nv.LUMA_RESUME_CONT, "shl"), (nv.CHROMA_RESUME_CONT, "shl"),
-                         (nv.LUMA_TILE, "mov"), (nv.CHROMA_TILE, "cmp")):
-            rows = rows_of(both, at, at + 8)
-            if not rows or rows[0][0] != at or rows[0][1] != mnem:
-                fail(f"resume at {at:#x} decoded as {rows[:1]}")
-        print("objdump: caves decode and jumps land on instruction starts")
-    else:
-        print("objdump not on PATH; decode and boundary checks skipped")
+    check_transfers(both, nv.DIRECT_AT[0], nv.DIRECT_AT[0] + len(LUMA_DIRECT), allow)
+    check_transfers(both, nv.DIRECT_AT[1], nv.DIRECT_AT[1] + len(CHROMA_DIRECT), allow)
+    check_transfers(both, nv.DIRECT_AT[2],
+                    nv.DIRECT_AT[2] + len(LUMA_RESTORE) + len(CHROMA_RESTORE), allow)
+    for at, raw in LANDING:
+        if both[at:at + len(raw)] != raw:
+            fail(f"landing pad at {at:#x} is {both[at:at + len(raw)].hex()}, wanted {raw.hex()}")
+    print("decoder: caves decode and jumps land on instruction starts")
 
     for name, kw in IMAGE_FLAGS.items():
         img = bytearray(original)
