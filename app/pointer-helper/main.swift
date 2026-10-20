@@ -53,8 +53,6 @@ enum PointerHelperMain {
 
         var lastPosition: CGPoint?
         var lastNudgeAt = Date.distantPast
-        var alreadyShowedCursorThisHiddenEpisode = false
-        var lastCursorVisible = true
 
         // Serial queue so ticks never overlap (shared nudge / cursor episode state).
         let queue = DispatchQueue(label: "com.bluemonkey.gpucontrol.pointerhelper")
@@ -75,15 +73,9 @@ enum PointerHelperMain {
             }
             lastPosition = position
 
-            let cursorVisible = CGCursorIsVisible()
-            if cursorVisible {
-                alreadyShowedCursorThisHiddenEpisode = false
-            } else if lastCursorVisible {
-                // Visible → hidden: new episode; allow one ShowCursor.
-                alreadyShowedCursorThisHiddenEpisode = false
-            }
-            lastCursorVisible = cursorVisible
-
+            // CGCursorIsVisible() is unavailable on current macOS, so the hidden state cannot be read.
+            // Only a real (genuine-looking) mouse-moved event is posted; the show/hide counter is not touched.
+            let cursorVisible = true
             let secondsSinceMouseMoved = CGEventSource.secondsSinceLastEventType(
                 .combinedSessionState,
                 eventType: .mouseMoved
@@ -98,16 +90,11 @@ enum PointerHelperMain {
                     positionChangeMaxAge: pollInterval,
                     mouseButtonDown: buttonDown,
                     cursorVisible: cursorVisible,
-                    alreadyShowedCursorThisHiddenEpisode: alreadyShowedCursorThisHiddenEpisode,
+                    alreadyShowedCursorThisHiddenEpisode: false,
                     secondsSinceLastNudge: secondsSinceLastNudge,
                     minNudgeInterval: minNudgeInterval
                 )
             )
-
-            if decision.shouldShowCursor {
-                CGDisplayShowCursor(CGMainDisplayID())
-                alreadyShowedCursorThisHiddenEpisode = true
-            }
 
             if decision.shouldNudge {
                 postZeroDeltaMouseMoved(at: position)
