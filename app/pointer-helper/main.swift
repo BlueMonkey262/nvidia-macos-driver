@@ -30,6 +30,9 @@ enum PointerHelperMain {
             // Log once, then wait under KeepAlive until the user grants access.
             fputs("\(helperLabel): Accessibility access is required to post pointer events.\n", stderr)
             writeState("needs_accessibility")
+            // Ask once so macOS shows its prompt and lists this binary under Accessibility.
+            let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+            _ = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
             waitUntilTrusted()
         }
 
@@ -97,7 +100,7 @@ enum PointerHelperMain {
             )
 
             if decision.shouldNudge {
-                postZeroDeltaMouseMoved(at: position)
+                postNudge(at: position)
                 lastNudgeAt = now
             }
         }
@@ -115,19 +118,25 @@ enum PointerHelperMain {
         return false
     }
 
-    /// Post a genuine mouseMoved at the current location (zero delta) so WindowServer clears
-    /// hide-while-typing. Prefer `.cghidEventTap`.
-    private static func postZeroDeltaMouseMoved(at location: CGPoint) {
+    /// Hide-while-typing (per app) clears on a mouseMoved that carries real movement; Sunshine's
+    /// absolute moves have zero delta, so nudge one pixel and straight back with non-zero deltas.
+    private static func postNudge(at location: CGPoint) {
+        let out = CGPoint(x: location.x + 1, y: location.y)
+        postMove(to: out, dx: 1, dy: 0)
+        postMove(to: location, dx: -1, dy: 0)
+    }
+
+    private static func postMove(to point: CGPoint, dx: Int64, dy: Int64) {
         guard let event = CGEvent(
             mouseEventSource: nil,
             mouseType: .mouseMoved,
-            mouseCursorPosition: location,
+            mouseCursorPosition: point,
             mouseButton: .left
         ) else {
             return
         }
-        event.setIntegerValueField(.mouseEventDeltaX, value: 0)
-        event.setIntegerValueField(.mouseEventDeltaY, value: 0)
+        event.setIntegerValueField(.mouseEventDeltaX, value: dx)
+        event.setIntegerValueField(.mouseEventDeltaY, value: dy)
         event.post(tap: .cghidEventTap)
     }
 
