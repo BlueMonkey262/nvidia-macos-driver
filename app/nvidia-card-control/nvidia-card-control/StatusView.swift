@@ -88,7 +88,7 @@ struct StatusView: View {
             HStack(spacing: 8) {
                 Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(ok ? .tint : .secondary)
+                    .foregroundStyle(ok ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     .accessibilityHidden(true)
                 Text(ok ? "Yes" : "No")
                     .foregroundStyle(.primary)

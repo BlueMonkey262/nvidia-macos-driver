@@ -76,7 +76,7 @@ struct CachesStatus: Codable, Equatable, Sendable {
 }
 
 /// Knobs the control panel edits. Values must match `nvmtlctl` KNOBS names.
-enum ConfKey {
+nonisolated enum ConfKey {
     static let framebufferFetchWS = "NVMTL_FBFETCH_WS"
     static let videoBitrateControl = "NVMTL_VT_RC"
     static let nvencHEVC = "NVMTL_NVENC_HEVC"
@@ -99,7 +99,7 @@ enum ConfKey {
     }
 }
 
-enum JSONDecoding {
+nonisolated enum JSONDecoding {
     static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         return decoder
