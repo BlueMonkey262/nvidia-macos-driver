@@ -15,6 +15,7 @@
 # With no PATH-TO-APP it uses the most recent build of this project: the newest app among Xcode's DerivedData
 # builds (Debug and Release), Xcode's archives, and the dot-app-builds folder next to builds/ (archives or apps). The image is unsigned: users open the app with right-click >
 # Open the first time (the README inside says how). Output: builds/NVIDIA-Card-Control-<version>.dmg (+ .sha256).
+# Copyright (c) 2026 BlueMonkey
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 set -eu
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Draw the disk image's background (600x360): a quiet light field with an arrow from the app to Applications.
 Run on any machine with Pillow:  python3 make-dmg-background.py [OUT.png]
+Copyright (c) 2026 BlueMonkey
 SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0"""
 import sys
 from PIL import Image, ImageDraw, ImageFont
