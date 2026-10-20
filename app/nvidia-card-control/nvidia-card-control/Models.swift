@@ -1,9 +1,10 @@
+// Copyright (c) 2026 BlueMonkey
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Foundation
 
 /// JSON from `nvmtlctl status --json`.
-struct DriverStatus: Codable, Equatable, Sendable {
+nonisolated struct DriverStatus: Codable, Equatable, Sendable {
     var tool: String
     var macos: String
     var build: String
@@ -45,7 +46,7 @@ struct DriverStatus: Codable, Equatable, Sendable {
 }
 
 /// One row from `nvmtlctl conf list --json`.
-struct ConfEntry: Codable, Equatable, Identifiable, Sendable {
+nonisolated struct ConfEntry: Codable, Equatable, Identifiable, Sendable {
     var key: String
     var defaultValue: String
     var value: String
@@ -70,7 +71,7 @@ struct ConfEntry: Codable, Equatable, Identifiable, Sendable {
 }
 
 /// JSON from `nvmtlctl caches status --json`.
-struct CachesStatus: Codable, Equatable, Sendable {
+nonisolated struct CachesStatus: Codable, Equatable, Sendable {
     var count: Int
     var paths: [String]
 }
@@ -145,7 +146,7 @@ nonisolated enum JSONDecoding {
     }
 }
 
-extension DriverStatus {
+nonisolated extension DriverStatus {
     static let previewSample = DriverStatus(
         tool: "0.1",
         macos: "26.0",
@@ -163,7 +164,7 @@ extension DriverStatus {
     )
 }
 
-extension ConfEntry {
+nonisolated extension ConfEntry {
     static let previewSamples: [ConfEntry] = [
         ConfEntry(
             key: ConfKey.framebufferFetchWS,
@@ -216,7 +217,7 @@ extension ConfEntry {
     ]
 }
 
-extension CachesStatus {
+nonisolated extension CachesStatus {
     static let previewSample = CachesStatus(
         count: 2,
         paths: [

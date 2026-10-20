@@ -1,3 +1,4 @@
+// Copyright (c) 2026 BlueMonkey
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Foundation
@@ -164,16 +165,8 @@ actor NvmtlCtl {
         timeout: TimeInterval
     ) async throws -> RunResult {
         try await withCheckedThrowingContinuation { continuation in
-            let lock = NSLock()
-            var didResume = false
-
-            let resumeOnce: (Result<RunResult, Error>) -> Void = { result in
-                lock.lock()
-                defer { lock.unlock() }
-                guard !didResume else { return }
-                didResume = true
-                continuation.resume(with: result)
-            }
+            let gate = ResumeGate(continuation)
+            let resumeOnce: @Sendable (Result<RunResult, Error>) -> Void = { gate.resume($0) }
 
             let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
             timer.schedule(deadline: .now() + timeout)
@@ -195,23 +188,15 @@ actor NvmtlCtl {
                 }
 
                 let group = DispatchGroup()
-                let dataLock = NSLock()
-                var stdoutData = Data()
-                var stderrData = Data()
-                var readError: Error?
+                let capture = PipeCapture()
 
                 group.enter()
                 DispatchQueue.global(qos: .userInitiated).async {
                     defer { group.leave() }
                     do {
-                        let data = try stdoutPipe.fileHandleForReading.readToEnd() ?? Data()
-                        dataLock.lock()
-                        stdoutData = data
-                        dataLock.unlock()
+                        capture.setStdout(try stdoutPipe.fileHandleForReading.readToEnd() ?? Data())
                     } catch {
-                        dataLock.lock()
-                        readError = error
-                        dataLock.unlock()
+                        capture.setReadError(error)
                     }
                 }
 
@@ -219,14 +204,9 @@ actor NvmtlCtl {
                 DispatchQueue.global(qos: .userInitiated).async {
                     defer { group.leave() }
                     do {
-                        let data = try stderrPipe.fileHandleForReading.readToEnd() ?? Data()
-                        dataLock.lock()
-                        stderrData = data
-                        dataLock.unlock()
+                        capture.setStderr(try stderrPipe.fileHandleForReading.readToEnd() ?? Data())
                     } catch {
-                        dataLock.lock()
-                        readError = error
-                        dataLock.unlock()
+                        capture.setReadError(error)
                     }
                 }
 
@@ -234,13 +214,14 @@ actor NvmtlCtl {
                 group.wait()
                 timer.cancel()
 
-                if let readError {
+                let captured = capture.snapshot()
+                if let readError = captured.readError {
                     resumeOnce(.failure(readError))
                     return
                 }
 
-                guard let stdout = String(data: stdoutData, encoding: .utf8),
-                      let stderr = String(data: stderrData, encoding: .utf8)
+                guard let stdout = String(data: captured.stdout, encoding: .utf8),
+                      let stderr = String(data: captured.stderr, encoding: .utf8)
                 else {
                     resumeOnce(.failure(ToolError.invalidUTF8))
                     return
@@ -257,5 +238,42 @@ actor NvmtlCtl {
                 )
             }
         }
+    }
+}
+
+/// Resumes a continuation exactly once, whichever of the exit, timeout or launch-failure paths gets there first.
+private nonisolated final class ResumeGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didResume = false
+    private let continuation: CheckedContinuation<NvmtlCtl.RunResult, Error>
+
+    init(_ continuation: CheckedContinuation<NvmtlCtl.RunResult, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ result: Result<NvmtlCtl.RunResult, Error>) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !didResume else { return }
+        didResume = true
+        continuation.resume(with: result)
+    }
+}
+
+/// Collects what the two pipe readers produce on background queues; every access goes through the lock.
+private nonisolated final class PipeCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stdout = Data()
+    private var stderr = Data()
+    private var readError: Error?
+
+    func setStdout(_ data: Data) { lock.lock(); stdout = data; lock.unlock() }
+    func setStderr(_ data: Data) { lock.lock(); stderr = data; lock.unlock() }
+    func setReadError(_ error: Error) { lock.lock(); readError = error; lock.unlock() }
+
+    func snapshot() -> (stdout: Data, stderr: Data, readError: Error?) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (stdout, stderr, readError)
     }
 }
