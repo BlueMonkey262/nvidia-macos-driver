@@ -1,32 +1,56 @@
-# NullMoth NVIDIA Driver for macOS (personal fork)
+# NVIDIA Metal driver for macOS (personal fork of NullMoth's)
 
 [![Metal API coverage](docs/metal-coverage.svg)](docs/metal-coverage/README.md)
 
-Every cell is one Metal method; [what the colors mean and how the map is made](docs/metal-coverage/README.md).
+Every cell is one Metal method, rated gray (not implemented), red (very slow), yellow (needs improvement),
+green (works great) or purple (works, but differs from Apple's result). [What the colors mean and how the map is
+made](docs/metal-coverage/README.md). Most ratings come from reading the source and are labelled as such; a rating
+only counts as tested when a test on the card backs it.
 
 > **This is a personal fork of [nullmoth/nvidia-macos-driver](https://github.com/nullmoth/nvidia-macos-driver), not
-> affiliated with NullMoth Systems.** It tracks upstream and adds a few changes, listed in [FORK.md](FORK.md):
-> hardware H.264 encode on Turing (RTX 20 / GTX 16) and its regression test. The license is unchanged
-> (source-available, noncommercial; see [License](#license)). Downloads, support and the 1401 app are upstream's.
+> affiliated with NullMoth Systems.** It tracks upstream and adds the changes listed in [FORK.md](FORK.md). The license
+> is unchanged (source-available, noncommercial; see [License](#license)). Downloads, support and the 1401 app are
+> upstream's.
 
-A Metal driver for NVIDIA GeForce cards on macOS 15 Sequoia (Intel Macs and OpenCore PCs). It is source-available and noncommercial; the
-kernel extensions, the Metal plugin and the shader translator are in this repository. The 1401 app that installs it
-(Mac and Windows) is its own project: [1401](https://github.com/nullmoth/1401).
+A Metal driver for NVIDIA GeForce cards on macOS 15 Sequoia (Intel Macs and OpenCore PCs). It is source-available and
+noncommercial; the kernel extensions, the Metal plugin and the shader translator are in this repository. The 1401 app
+that installs it (Mac and Windows) is its own project: [1401](https://github.com/nullmoth/1401).
 
-Supported cards are Turing and newer: GTX 16, RTX 20, 30, 40 and 50, TITAN RTX, Quadro RTX and the T-series. Most
-testing is done on an RTX 5060, so other cards may have problems that haven't been found yet. See
-[card support](docs/CARD-SUPPORT.md) for what has been reported working.
+Supported cards are Turing and newer: GTX 16, RTX 20, 30, 40 and 50, TITAN RTX, Quadro RTX and the T-series. Upstream
+tests mostly on an RTX 5060; this fork tests on an RTX 2060 Super (Turing) in a macOS 15.8.1 VM with GPU passthrough.
+Nothing here has been run on other cards, and macOS 26 is untested. See [card support](docs/CARD-SUPPORT.md).
+
+> **Status: experimental.** Everything here is tested on one card (an RTX 2060 Super) in a macOS 15.8.1 virtual
+> machine. If you have another NVIDIA card, you are welcome to help test: run the driver, try the tests in `tools/`, and
+> report what you see, labelled as in [docs/GAMES.md](docs/GAMES.md). Issues and pull requests are open.
+
+## What this fork adds
+
+- **Hardware H.264 encode on Turing** (RTX 20 / GTX 16), with bitrate control, a low-latency path and a PSNR
+  regression test: [docs/H264.md](docs/H264.md).  HEVC encode is an opt-in experiment on a separate branch.
+- **A rated map of the whole Metal API**, above, with the review notes and the tests behind each rating.
+- **Metal behaviour fixes** found by reviewing the plugin against Apple's documentation: a use-after-free in texture
+  residency, LOD-clamp sampler lifetime, real kernel start/end times, asynchronous compile completion handlers,
+  nil-binding semantics and more. Each has a regression test in `tools/` that fails on the old plugin and passes on
+  the new one. See the Git history and [FORK.md](FORK.md).
+- **Games and speed:** see below and [docs/GAMES.md](docs/GAMES.md).
+
+## And it games!
+
+Terraria, Kerbal Space Program, No Man's Sky and Cities: Skylines run on it, and hardware video encode passes its
+tests (streaming through Sunshine is still being fixed). What runs, what doesn't, and the codec benchmarks are in [docs/GAMES.md](docs/GAMES.md).
+
+Results are labelled in the docs: read from source / builds / VM-tested on Turing / not tested.
 
 - Changes: [CHANGELOG.md](CHANGELOG.md), downloads on the [releases page](https://github.com/nullmoth/nvidia-macos-driver/releases)
 - Problems: [troubleshooting](docs/TROUBLESHOOTING.md), then Send logs from the 1401 app
 - Installing macOS from Windows: [1401](https://github.com/nullmoth/1401)
 - How it works: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)
-- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Contributing (AI-assisted code is welcome, a human reviews anything touching the kernel): [CONTRIBUTING.md](CONTRIBUTING.md)
+- Upstream project and support: https://github.com/nullmoth/nvidia-macos-driver
 
 If your PC doesn't boot macOS with OpenCore yet, set that up first with the
 [OpenCore Install Guide](https://dortania.github.io/OpenCore-Install-Guide/), then install the driver.
-
-Upstream project and support links: https://github.com/nullmoth/nvidia-macos-driver
 
 | | |
 |---|---|
