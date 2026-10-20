@@ -9,6 +9,8 @@
 #   nvmtlctl restart-windowserver       log the desktop session out and back in (the desktop restarts)
 #   nvmtlctl logs [DIR]                 collect driver state and logs into DIR (default ~/nvmtl-logs-DATE); nothing is sent anywhere
 # Exit codes: 0 ok, 1 failed, 2 usage, 3 needs sudo.
+# Copyright (c) 2026 BlueMonkey
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 VERSION=0.1
@@ -37,6 +39,12 @@ NVMTL_NO_BUFTEX_RECYCLE|0|Do not reuse buffer-backed textures (debugging)
 NVMTL_VRAM_HEADROOM_MB|256|VRAM kept free before images spill to system memory'
 
 conf_val() { [ -r "$CONF" ] && sed -n "s/^$1=//p" "$CONF" | tail -1; }
+
+# Keep only the newest few backups of nvrm610.conf (one is made on every change).
+KEEP_BACKUPS=5
+prune_backups() {
+  ls -1t "$CONF".bak-* 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | while read -r f; do rm -f -- "$f"; done
+}
 
 cmd_status() {
   local mac build gpu metal kx pkg plugin_sha plugin_size enc_h264 enc_hevc bargs
@@ -87,9 +95,10 @@ cmd_conf() {
       mkdir -p "$(dirname $CONF)"; touch $CONF
       cp $CONF "$CONF.bak-$(date +%Y%m%d-%H%M%S)"
       grep -v "^$1=" $CONF > "$CONF.new" || true; echo "$1=$2" >> "$CONF.new"; mv "$CONF.new" $CONF
-      echo "set $1=$2 (a backup of the old file is next to it; processes read it when they start: restart the app, or the desktop for WindowServer)" ;;
+      prune_backups
+      echo "set $1=$2 (a backup of the old file is next to it; the newest $KEEP_BACKUPS are kept; processes read it when they start: restart the app, or the desktop for WindowServer)" ;;
     unset) [ $# = 1 ] || usage; need_root; [ -e $CONF ] || exit 0
-      cp $CONF "$CONF.bak-$(date +%Y%m%d-%H%M%S)"; grep -v "^$1=" $CONF > "$CONF.new" || true; mv "$CONF.new" $CONF; echo "unset $1" ;;
+      cp $CONF "$CONF.bak-$(date +%Y%m%d-%H%M%S)"; grep -v "^$1=" $CONF > "$CONF.new" || true; mv "$CONF.new" $CONF; prune_backups; echo "unset $1" ;;
     *) usage ;;
   esac
 }
