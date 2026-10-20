@@ -46,6 +46,8 @@ struct ContentView: View {
             DisplayView(store: store)
         case .video:
             VideoView(store: store)
+        case .sunshine:
+            SunshineView(store: store)
         case .performance:
             PerformanceView(store: store)
         case .pointer:
