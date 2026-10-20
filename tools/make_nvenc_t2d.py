@@ -31,9 +31,11 @@ padding at 0x9ee0. A built-in decoder checks every transfer before the bytes are
 
 Optional --direct-row (off unless named): skip the per-row memcpy into the staging buffer when the edge pad
 length is zero (width a multiple of 16). The t2d loops then read the source row directly. Rows that still need
-padding keep the original memcpy + edge fill. Hooks replace the memcpy calls and the row-loop heads; caves sit
-in the padding after the t2d loops and (when --low-bar is also used) after the low-bar cave. Apply --low-bar in
-the same run when both are wanted: a later --low-bar refuses padding that is no longer empty.
+padding keep the original memcpy + edge fill. Chroma tests that same luma pad, which is sound for even widths:
+a luma multiple of 16 makes the chroma row half as long, so it needs no edge fill either. Hooks replace the
+memcpy calls and the row-loop heads; caves sit in the padding after the t2d loops and (when --low-bar is also
+used) after the low-bar cave. Apply --low-bar in the same run when both are wanted: a later --low-bar refuses
+padding that is no longer empty.
 
 Optional --short-zero (off unless named): the status-buffer bzero every frame uses a 4096-byte length instead of
 the full 6.88 MB mapping. The CPU only reads the status header after the wait; a too-short clear would show up as
@@ -139,7 +141,10 @@ LUMA_RESUME_CONT, CHROMA_RESUME_CONT = 0x6337, 0x6457
 MEMCPY = 0x8372
 LUMA_CALL_OLD = bytes.fromhex("e8f81f0000")    # call memcpy
 CHROMA_CALL_OLD = bytes.fromhex("e8de1e0000")
-RESUME_OLD = bytes.fromhex("41ffc4418b")      # inc r12d; start of mov eax, ...
+# Five bytes: `inc r12d` (41 ff c4) and the REX+opcode of `mov eax,[r?+0xc]` (41 8b).
+# The ModRM at 0x6333 / 0x6453, which selects r15 versus r9, is not pinned. The
+# whole-file hash is what refuses a rebuilt library; this lock is defence in depth.
+RESUME_OLD = bytes.fromhex("41ffc4418b")
 # The four caves below sit at 0x9e0a / 0x9eab / 0x9f36 / 0x9f49.
 # tools/test_h264_perf_patch.py decodes them again and checks every jump lands on an instruction start.
 #   luma   0x9e0a: mov [rbp-0x330],r14 ; cmp qword [rbp-0x308],0 ; jne +copy ; mov r14,r15 ;
@@ -148,6 +153,15 @@ RESUME_OLD = bytes.fromhex("41ffc4418b")      # inc r12d; start of mov eax, ...
 #                  jmp 0x64be (t2d entry)                               +copy: call memcpy(0x8372) ; jmp 0x6494
 #   luma restore   0x9f36: mov r14,[rbp-0x330] ; inc r12d ; mov eax,[r15+0xc] ; jmp 0x6337
 #   chroma restore 0x9f49: mov r14,[rbp-0x330] ; inc r12d ; mov eax,[r9+0xc]  ; jmp 0x6457
+# Chroma does not repeat luma's `mov r15,[rbp-0x2b8]`. That reload is live for luma: the fast path
+# jumps to 0x639a, which uses r15 as the descriptor, and skips the original reload at 0x6380. On chroma
+# it would be dead. The tile entry at 0x64be reloads r9 from [rbp-0x2b8], the pitch comes from [r9+0x10],
+# the row head reads [r9+0xc], and the next row recomputes r15 at 0x6474. Putting the mov in would change
+# the injected bytes, so it stays out.
+# Both caves test the luma pad at [rbp-0x308] (aligned luma bytes minus the luma width), not a chroma pad.
+# That holds for even widths: the luma fast path already requires a multiple of 16, and then the chroma
+# row length and the chroma source length are each half of luma, so a zero luma pad means chroma needs no
+# edge fill either.
 LUMA_DIRECT = bytes.fromhex(
     "4c89b5d0fcffff4883bdf8fcffff00750f4d89fe4c8bbd48fdffffe970c5ffffe843e5ffffe946c5ffff")
 CHROMA_DIRECT = bytes.fromhex(
