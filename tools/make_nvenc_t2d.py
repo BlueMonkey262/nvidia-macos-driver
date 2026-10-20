@@ -43,8 +43,11 @@ usage: make_nvenc_t2d.py [--keep-multi-ref] [--low-bar] [--direct-row] [--short-
                          <libnvenc_h264.dylib> <out libnvenc_h264_t2d.dylib>
 """
 import hashlib
+import os
+import stat
 import struct
 import sys
+import tempfile
 
 KNOWN = "c78e21aae60f"      # SHA-256 prefix of the 2.2.0 encoder these offsets were read from
 LUMA, CHROMA = 0x63AA, 0x64D9           # start of the luma / chroma tiling code for one row (mov eax,r12d; shr eax,4)
@@ -554,12 +557,45 @@ def patch(data, single_ref=True, low_bar=False, direct_row=False, short_zero=Fal
     return listing
 
 
+def _write_output(dst, data):
+    """Publish `data` as `dst` only after the bytes are complete in a temp file.
+
+    open(dst, "wb") kept an existing file's mode, including the exec bit, and
+    created a missing file as 0o666 masked by umask. mkstemp is mode 0o600, so
+    the mode is set on the temp file before os.replace. On failure the temp
+    file is removed and `dst` is left as it was.
+    """
+    directory = os.path.dirname(os.path.abspath(dst)) or "."
+    if os.path.exists(dst):
+        mode = stat.S_IMODE(os.stat(dst).st_mode)
+    else:
+        current = os.umask(0)
+        os.umask(current)
+        mode = 0o666 & ~current
+    fd, tmp = tempfile.mkstemp(prefix="." + os.path.basename(dst) + ".", dir=directory)
+    try:
+        os.fchmod(fd, mode)
+        with os.fdopen(fd, "wb") as out:
+            fd = None
+            out.write(data)
+        os.replace(tmp, dst)
+        tmp = None
+    finally:
+        if fd is not None:
+            os.close(fd)
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
 def main(src, dst, single_ref=True, low_bar=False, direct_row=False, short_zero=False):
-    data = bytearray(open(src, "rb").read())
+    with open(src, "rb") as src_file:
+        data = bytearray(src_file.read())
     listing = patch(data, single_ref=single_ref, low_bar=low_bar,
                     direct_row=direct_row, short_zero=short_zero)
-    with open(dst, "wb") as f:
-        f.write(data)
+    _write_output(dst, data)
     print(f"wrote {dst}: luma and chroma tiling loops now write the t2d / block height 2 layout"
           + ("; P-frames use one reference frame" if single_ref else "; P-frames keep up to three references")
           + ("; flag-0 BAR1 windows dropped after zero-fill (USERD kept)" if low_bar else "")
