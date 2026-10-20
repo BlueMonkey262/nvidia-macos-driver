@@ -413,8 +413,24 @@ def verify_low_bar_cave(code):
     return _format(rows)
 
 
+def _assert_cave_bounds():
+    """Each cave must end at or before the next fixed address. There is no spare byte today."""
+    checks = (
+        ("LUMA_CAVE", CAVE_L, LUMA_CAVE, DIRECT_AT[0]),
+        ("CHROMA_CAVE", CAVE_C, CHROMA_CAVE, DIRECT_AT[1]),
+        ("LOW_BAR_CAVE", FREE_AT, LOW_BAR_CAVE, DIRECT_AT[2]),
+    )
+    for name, start, blob, limit in checks:
+        end = start + len(blob)
+        if end > limit:
+            raise SystemExit(
+                f"{name} at {start:#x} is {len(blob)} bytes and ends at {end:#x}, "
+                f"past the next fixed address {limit:#x}")
+
+
 def apply_low_bar(data):
     """Jmp from the bzero call to the cave. `data` is the library image (file offset == address)."""
+    _assert_cave_bounds()
     code = LOW_BAR_CAVE
     cave = verify_low_bar_cave(code)
     if len(data) < FREE_END:
@@ -482,6 +498,7 @@ def verify_direct_row_caves():
 
 def apply_direct_row(data):
     """Skip the per-row memcpy when the edge pad is zero. `data` is the library image."""
+    _assert_cave_bounds()
     verify_direct_row_caves()
     _need(data, LUMA_CALL, LUMA_CALL_OLD, "luma memcpy")
     _need(data, CHROMA_CALL, CHROMA_CALL_OLD, "chroma memcpy")
@@ -510,6 +527,7 @@ def patch(data, single_ref=True, low_bar=False, direct_row=False, short_zero=Fal
     --low-bar runs before --direct-row so the low-bar cave can claim empty padding at 0x9ee0;
     the direct-row restore stubs sit immediately after that cave.
     """
+    _assert_cave_bounds()
     if not hashlib.sha256(data).hexdigest().startswith(KNOWN):
         raise SystemExit(f"not the known encoder ({KNOWN}...): read the loops again before patching")
     for hook in (LUMA, CHROMA):
