@@ -68,6 +68,17 @@ nonisolated struct ConfEntry: Codable, Equatable, Identifiable, Sendable {
     var isEnabledFlag: Bool {
         value != "0"
     }
+
+    /// A setting whose stored values are only "0" and "1" is a flag; it is shown as On or Off, like its toggle.
+    var isFlag: Bool {
+        (defaultValue == "0" || defaultValue == "1") && (value == "0" || value == "1")
+    }
+
+    /// The default as a person reads it: On or Off for a flag, otherwise the stored value.
+    var defaultDescription: String {
+        guard isFlag else { return defaultValue }
+        return defaultValue == "0" ? String(localized: "Off") : String(localized: "On")
+    }
 }
 
 /// JSON from `nvmtlctl caches status --json`.

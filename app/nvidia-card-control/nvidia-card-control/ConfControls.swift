@@ -23,19 +23,14 @@ struct ConfSettingChrome<Content: View>: View {
                     .accessibilityLabel(String(localized: "Description: \(entry.description)"))
 
                 HStack(spacing: 12) {
-                    if entry.isAtDefault {
-                        Text("Default")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .accessibilityLabel(String(localized: "Using the default value"))
-                    } else {
-                        Text("Default \(entry.defaultValue)")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .accessibilityLabel(
-                                String(localized: "Default value \(entry.defaultValue)")
-                            )
-                    }
+                    Text("Default: \(entry.defaultDescription)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityLabel(
+                            entry.isAtDefault
+                                ? String(localized: "Using the default value, \(entry.defaultDescription)")
+                                : String(localized: "Default value: \(entry.defaultDescription)")
+                        )
 
                     Button("Reset") {
                         onReset()
