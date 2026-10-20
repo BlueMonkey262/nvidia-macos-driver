@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdatomic.h>
+#include <errno.h>
 #include <math.h>
 #define VK_NO_PROTOTYPES 1
 #include <vulkan/vulkan.h>
@@ -2573,27 +2574,29 @@ typedef struct nvmtl_address_page { nvk_buffer buffer; struct nvmtl_address_page
 // mapping is one NVRM client of the 4096 a process may hold (kNvClientsPerPid). 256 kept pools reached that limit
 // in Factorio, so the number kept is small by default; NVMTL_POOL_KEEP overrides it (0..256).
 #define NVMTL_KEEP_DEFAULT 16
-static unsigned nvmtl_keep_limit(void)
+static pthread_once_t g_keep_once = PTHREAD_ONCE_INIT;
+static unsigned g_keep_limit = NVMTL_KEEP_DEFAULT;
+static int g_keep_enabled;
+static void nvmtl_keep_init(void)
 {
-    static int lim = -1;
-    if (lim < 0) { const char *e = getenv("NVMTL_POOL_KEEP"); int v = e ? atoi(e) : NVMTL_KEEP_DEFAULT;
-        lim = v < 0 ? 0 : v > NVMTL_KEEP ? NVMTL_KEEP : v; }
-    return (unsigned)lim;
+    const char *e = getenv("NVMTL_POOL_KEEP");
+    if (e) {
+        char *end = NULL; errno = 0;
+        long v = strtol(e, &end, 10);
+        if (errno == ERANGE || end == e || *end || v < 0 || v > NVMTL_KEEP)
+            nvlog("vk: invalid NVMTL_POOL_KEEP=\"%s\" (expected 0..%u); using default %u", e, NVMTL_KEEP, NVMTL_KEEP_DEFAULT);
+        else g_keep_limit = (unsigned)v;
+    }
+    e = getenv("NVMTL_POOL_REUSE");
+    g_keep_enabled = g_keep_limit && (!e || e[0] == '1') && getenv("NVMTL_NO_POOL_REUSE") == NULL;
+    if (g_keep_enabled) nvlog("vk: pool reuse ON (witness-guarded default) - empty command pools and address pages kept (<= %u, NVMTL_POOL_KEEP), reused only on THE WITNESS", g_keep_limit);
+    else nvlog("vk: pool reuse OFF by environment (NVMTL_POOL_KEEP=%u) - command pools and address pages are created and destroyed per commit", g_keep_limit);
 }
+static unsigned nvmtl_keep_limit(void) { pthread_once(&g_keep_once, nvmtl_keep_init); return g_keep_limit; }
+static int nvmtl_keep_on(void) { pthread_once(&g_keep_once, nvmtl_keep_init); return g_keep_enabled; }
 static pthread_mutex_t g_keep_lock = PTHREAD_MUTEX_INITIALIZER;
 static VkCommandPool g_keep_pool[NVMTL_KEEP]; static unsigned g_keep_npool;
 static nvmtl_address_page *g_keep_page[NVMTL_KEEP]; static unsigned g_keep_npage;
-static int nvmtl_keep_on(void)
-{
-    static int on = -1;
-    if (on < 0) {
-        const char *e = getenv("NVMTL_POOL_REUSE");
-        on = (!e || e[0] == '1') && getenv("NVMTL_NO_POOL_REUSE") == NULL;
-        if (on) nvlog("vk: pool reuse ON (witness-guarded default) - empty command pools and address pages kept (<= %u, NVMTL_POOL_KEEP), reused only on THE WITNESS", nvmtl_keep_limit());
-        else nvlog("vk: pool reuse OFF by environment - command pools and address pages are created and destroyed per commit");
-    }
-    return on;
-}
 static VkCommandPool nvmtl_keep_pool_pop(void)
 {
     VkCommandPool p = VK_NULL_HANDLE;
