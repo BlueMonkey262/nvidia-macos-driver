@@ -27,6 +27,14 @@ Only open problems are listed here. What has been fixed and measured is in [docs
 | Ampere, Ada, laptops, macOS 26 | Not tested with any fork change. Upstream says macOS 26 works for some users. | not tested |
 | Upstream issues that also affect this fork | See the upstream tracker: small-BAR flicker (#169, #183), Chromium/WebKit video decode (#175), plugin memory-safety crashes (#251, #150), OpenGL speed (#261). | not tested here |
 
+## Telemetry
+
+`tools/gpu_telemetry.m` and `nvmtlctl telemetry --json` provide an r610 read-only probe (read from source; not built or card-tested).
+Build against NVIDIA 610.57.04 headers using the command in the probe. Run `tools/test_metal_telemetry.m` on macOS.
+RUSD cached fan RPM/power/clocks/utilisation require firmware data already being published; freshness is unverified.
+Fan percent, hotspot, normalized maximum clocks and the macOS per-PID user-client quota count need further ABI work.
+The SwiftUI consumer and plugin stats publication are design-only; see the telemetry research report in `.scratch/agents/`.
+
 ## Work queue
 
 Roughly in order of value per effort. "Hardware" means it needs a real card and cannot be checked by reading code.
