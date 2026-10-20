@@ -31,7 +31,8 @@ static int nvmtl_gsub_finish(NVMTLSubmissionPart *part) {
     part->inflight = NULL;
     const int r = nvmtl_vk_submit_finish(f);
     atomic_fetch_sub(&gsub_inflight, 1);
-    if (r == 0) nvmtl_vk_inflight_free(f);
+    if (r == -2) nvmtl_vk_inflight_quarantine(f);
+    else nvmtl_vk_inflight_free(f);
     return r;
 }
 @interface NVMTLPendingSurfaceWrite : NSObject {
@@ -397,14 +398,15 @@ static int nvmtl_skip_empty_on(void) {
         });
     });
 }
-- (void)nvmtlMarkScheduled {
-    if (_scheduleAfterPublish) return;
+- (void)nvmtlBeginScheduling {
     [_completionCondition lock];
-    if (!_wasScheduled) {
-        // kernelStart/End are host times for CPU scheduling (not GPU execution).
-        CFTimeInterval now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e9;
-        if (!_legacyKernelStart) _legacyKernelStart = now;
-        _legacyKernelEnd = now;
+    if (!_legacyKernelStart) _legacyKernelStart = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e9;
+    [_completionCondition unlock];
+}
+- (void)nvmtlMarkScheduled {
+    [_completionCondition lock];
+    if (!_legacyKernelEnd) _legacyKernelEnd = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e9;
+    if (!_wasScheduled && !_scheduleAfterPublish) {
         _wasScheduled = YES; _cbstatus = MTLCommandBufferStatusScheduled;
         NSArray *handlers = [_scheduledHandlers copy]; [_scheduledHandlers removeAllObjects];
         [self nvmtlDispatchHandlers:handlers scheduled:YES];
@@ -421,7 +423,10 @@ static int nvmtl_skip_empty_on(void) {
     }
 }
 - (void)nvmtlFinishExecution:(NSError *)error {
-    if (_scheduleAfterPublish) { _scheduleAfterPublish = NO; [self nvmtlMarkScheduled]; }
+    if (_scheduleAfterPublish) {
+        [self nvmtlBeginScheduling];
+        _scheduleAfterPublish = NO; [self nvmtlMarkScheduled];
+    }
     for (NSUInteger i = _nextPart; i < _parts.count; i++) {
         NVMTLSubmissionPart *p = _parts[i];
         if (![p isKindOfClass:[NVMTLSubmissionPart class]] || !p->inflight) continue;
@@ -556,8 +561,9 @@ static void nvmtl_prepare_submission_copies(NVMTLSubmissionPart *part) {
         if (!part->commands.cb) return NO;
         if (!part->encoders && !part->resources.count && !part->surfaces.count && !part->scratch.count && nvmtl_skip_empty_on()) {
             if (!nvmtl_evfold_on() || _nextSubmit + 1 >= _parts.count) return NO;
-            [self nvmtlMarkScheduled];
+            [self nvmtlBeginScheduling];
             nvmtl_vk_cmd_abandon(&part->commands);
+            [self nvmtlMarkScheduled];
             part->aheadEmpty = YES; _nextSubmit++;
             nvmtl_evfold_promise_part(part);
             nvmtl_evfold_census(&gEvFoldEmpty, "empty split parts retired by the ahead pass");
@@ -571,12 +577,14 @@ static void nvmtl_prepare_submission_copies(NVMTLSubmissionPart *part) {
         }
         nvmtl_inflight *f = nvmtl_vk_inflight_new();
         if (!f) return NO;
+        [self nvmtlBeginScheduling];
         for (NVMTLBuffer *buffer in part->copyInputs) nvmtl_buffer_sync_in(buffer);
-        [self nvmtlMarkScheduled];
         const int r = nvmtl_vk_submit_begin(&part->commands, f);
+        [self nvmtlMarkScheduled];
         _nextSubmit++;
         if (r) {
-            nvmtl_vk_inflight_free(f);
+            if (r == -2) nvmtl_vk_inflight_quarantine(f);
+            else nvmtl_vk_inflight_free(f);
             part->aheadFailed = r;
             return NO;
         }
@@ -626,20 +634,29 @@ static void nvmtl_gsub_ahead_pass1(void) {
         if (have < part->value) return NO;
     }
     if (!ahead && part->commands.cb && !part->encoders && !part->resources.count && !part->surfaces.count && !part->scratch.count && nvmtl_skip_empty_on()) {
-        [self nvmtlMarkScheduled];
+        [self nvmtlBeginScheduling];
         nvmtl_vk_cmd_abandon(&part->commands);
+        [self nvmtlMarkScheduled];
         const unsigned long long k = atomic_fetch_add(&gSkipEmpty, 1);
         if (!k || ((k + 1) & 0xFFF) == 0) nvlog("commit: %llu empty submission parts NOT submitted (no encoder, no resources) - each WAS a full submit + wait", k + 1);
     }
     if (part->commands.cb || ahead) {
-        [self nvmtlMarkScheduled];
         int result;
         if (part->inflight) result = nvmtl_gsub_finish(part);
         else if (part->aheadFailed) result = part->aheadFailed;
         else {
-            nvmtl_prepare_submission_copies(part);
-            for (NVMTLBuffer *buffer in part->copyInputs) nvmtl_buffer_sync_in(buffer);
-            result = nvmtl_vk_submit_wait(&part->commands);
+            nvmtl_inflight *f = nvmtl_vk_inflight_new();
+            if (!f) result = -1;
+            else {
+                [self nvmtlBeginScheduling];
+                nvmtl_prepare_submission_copies(part);
+                for (NVMTLBuffer *buffer in part->copyInputs) nvmtl_buffer_sync_in(buffer);
+                result = nvmtl_vk_submit_begin(&part->commands, f);
+                [self nvmtlMarkScheduled];
+                if (!result) result = nvmtl_vk_submit_finish(f);
+                if (result == -2) nvmtl_vk_inflight_quarantine(f);
+                else nvmtl_vk_inflight_free(f);
+            }
         }
         if (result == -2) {
             if (!nvmtl_quarantined_parts) nvmtl_quarantined_parts = [NSMutableArray new];

@@ -414,19 +414,23 @@ static void nvmtl_res2_kick(int scan) {
 }
 extern int nvmtl_vk_mig_batch_begin(void); extern int nvmtl_vk_mig_batch_end(void);
 static int gRes2Batching;
-typedef struct { __unsafe_unretained NVMTLTexture *t; nvk_image old; } nvmtl_pend_t;
+typedef struct { CFTypeRef t; nvk_image old; } nvmtl_pend_t;
 static nvmtl_pend_t *gPend; static unsigned gPendN, gPendCap; static uint64_t gBatchN, gBatchMoves;
 static void nvmtl_grave_put(const nvk_image *old);
 static void nvmtl_res2_batch_end(void);
 static void nvmtl_res2_pend(NVMTLTexture *t, const nvk_image *old) {
     if (gPendN == gPendCap) { unsigned c = gPendCap ? gPendCap * 2 : 128; nvmtl_pend_t *n = realloc(gPend, c * sizeof *n); if (n) { gPend = n; gPendCap = c; } }
-    if (gPendN < gPendCap) { gPend[gPendN].t = t; gPend[gPendN].old = *old; gPendN++; }
+    // Give the batch its own retain until batch_end clears _rstate. The current pager's strong snapshots also
+    // hold these textures; the batch retain makes its ownership independent of those snapshots.
+    if (gPendN < gPendCap) { gPend[gPendN].t = CFBridgingRetain(t); gPend[gPendN].old = *old; gPendN++; }
     else { nvmtl_res2_batch_end(); nvmtl_grave_put(old); __atomic_store_n(&t->_rstate, 0, __ATOMIC_RELEASE); }
     if (gPendN >= 128) { nvmtl_res2_batch_end(); nvmtl_vk_mig_batch_begin(); }
 }
 static void nvmtl_res2_batch_end(void) {
     (void)nvmtl_vk_mig_batch_end();
-    for (unsigned k = 0; k < gPendN; k++) { nvmtl_grave_put(&gPend[k].old); __atomic_store_n(&gPend[k].t->_rstate, 0, __ATOMIC_RELEASE); }
+    for (unsigned k = 0; k < gPendN; k++) { NVMTLTexture *t = (__bridge NVMTLTexture *)gPend[k].t;
+        nvmtl_grave_put(&gPend[k].old); __atomic_store_n(&t->_rstate, 0, __ATOMIC_RELEASE); }
+    for (unsigned k = 0; k < gPendN; k++) CFRelease(gPend[k].t);
     if (gPendN) { gBatchN++; gBatchMoves += gPendN;
         static unsigned said; if (said++ < 4 || said % 256 == 0) nvlog("residency (res2): evict-batch %llu: %u textures copied in ONE submission (%llu moves in %llu batches)",
             (unsigned long long)gBatchN, gPendN, (unsigned long long)gBatchMoves, (unsigned long long)gBatchN); }
@@ -2536,9 +2540,13 @@ static size_t nvmtl_fc_width(NSUInteger dataType)
 - (void)newFunctionWithName:(NSString *)name constantValues:(MTLFunctionConstantValues *)cv
           completionHandler:(void (^)(id<MTLFunction>, NSError *))handler {
     if (!handler) return;
-    NSError *err = nil;
-    id<MTLFunction> f = [self newFunctionWithName:name constantValues:cv error:&err];
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ handler(f, err); });
+    NSString *nameCopy = [name copy];
+    MTLFunctionConstantValues *valuesCopy = [cv copy];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ @autoreleasepool {
+        NSError *err = nil;
+        id<MTLFunction> f = [self newFunctionWithName:nameCopy constantValues:valuesCopy error:&err];
+        handler(f, f ? nil : err);
+    }});
 }
 - (id<MTLFunction>)newFunctionWithDescriptor:(id)desc error:(NSError **)error {
     if (error) *error = nil;
@@ -2563,7 +2571,7 @@ static size_t nvmtl_fc_width(NSUInteger dataType)
                            : [self newFunctionWithName:name];
     if ([(id)f isKindOfClass:[NVMTLFunction class]]) {
         if (spec.length) ((NVMTLFunction *)f)->_specName = [spec copy];
-        if ([desc respondsToSelector:@selector(options)]) ((NVMTLFunction *)f)->_options = [desc options];
+        if ([desc respondsToSelector:@selector(options)]) ((NVMTLFunction *)f)->_options = [(MTLFunctionDescriptor *)desc options];
     }
     if (cv) return f;
     if (!f && error)
@@ -2574,9 +2582,13 @@ static size_t nvmtl_fc_width(NSUInteger dataType)
 }
 - (void)newFunctionWithDescriptor:(id)desc completionHandler:(void (^)(id<MTLFunction>, NSError *))handler {
     if (!handler) return;
-    NSError *err = nil;
-    id<MTLFunction> f = [self newFunctionWithDescriptor:desc error:&err];
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ handler(f, err); });
+    // Snapshot on the caller's thread; a descriptor that cannot be copied is used as passed, as the synchronous path does.
+    id descCopy = [desc respondsToSelector:@selector(copyWithZone:)] ? [desc copy] : desc;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ @autoreleasepool {
+        NSError *err = nil;
+        id<MTLFunction> f = [self newFunctionWithDescriptor:descCopy error:&err];
+        handler(f, f ? nil : err);
+    }});
 }
 - (NSArray<NSString *> *)externFunctionNames {
     NSSet<NSString *> *x = nvmtl_mtlb_extern_names(_raw);
@@ -2692,6 +2704,11 @@ static void nvmtl_sample_counter(NVMTLCommandBuffer *cb, id sb, NSUInteger i, id
 }
 
 unsigned nvmtl_apps1_resolve_miss, nvmtl_apps1_resolve_extra, nvmtl_apps1_ds_resolve_miss;
+@interface NVMTLSamplerVariant : NSObject { @public nvk_sampler sampler; } @end
+@implementation NVMTLSamplerVariant
+- (void)dealloc { nvmtl_vk_sampler_destroy(&sampler); }
+@end
+
 @interface NVMTLRenderCommandEncoder () { unsigned _groupDepth, _dumpDepth; NSString *_dumpName; BOOL _dumpPso; }
 - (void)nvmtlDumpBoundFragmentBuffers;
 @end
@@ -2760,7 +2777,7 @@ static NSDictionary *nvmtl_pixel_sampler_norm(NSDictionary *m) {
 /* Metal's set*SamplerState:lodMinClamp:lodMaxClamp: replaces the sampler state's clamps for that
  * binding. Cache VkSampler variants on the state (interned by create-info, including LOD). */
 enum { NVMTL_LOD_CLAMP_CACHE = 32 };
-static nvk_sampler *nvmtl_sampler_lod_clamp(NVMTLSamplerState *ns, float lo, float hi) {
+static nvk_sampler *nvmtl_sampler_lod_clamp(NVMTLCommandBuffer *cb, NVMTLSamplerState *ns, float lo, float hi) {
     if (!ns || !ns->_s.s) return NULL;
     uint32_t lb, hb, lb0, hb0;
     memcpy(&lb, &lo, 4); memcpy(&hb, &hi, 4);
@@ -2770,23 +2787,25 @@ static nvk_sampler *nvmtl_sampler_lod_clamp(NVMTLSamplerState *ns, float lo, flo
     NSString *key = [NSString stringWithFormat:@"%08x:%08x", lb, hb];
     @synchronized (ns) {
         if (!ns->_lodClampSamplers) ns->_lodClampSamplers = [NSMutableDictionary new];
-        NSValue *hit = ns->_lodClampSamplers[key];
-        if (hit) return (nvk_sampler *)hit.pointerValue;
+        NVMTLSamplerVariant *hit = ns->_lodClampSamplers[key];
+        if (hit) {
+            nvmtl_retain_resource(cb, hit);
+            return &hit->sampler;
+        }
         while (ns->_lodClampSamplers.count >= NVMTL_LOD_CLAMP_CACHE) {
             NSString *drop = ns->_lodClampSamplers.allKeys.firstObject;
             if (!drop) break;
-            nvk_sampler *old = (nvk_sampler *)[ns->_lodClampSamplers[drop] pointerValue];
             [ns->_lodClampSamplers removeObjectForKey:drop];
-            if (old) { nvmtl_vk_sampler_destroy(old); free(old); }
         }
-        nvk_sampler *s = calloc(1, sizeof *s);
-        if (!s || nvmtl_vk_sampler_create_lod(&ns->_s, lo, hi, s)) {
-            free(s);
+        NVMTLSamplerVariant *variant = [NVMTLSamplerVariant new];
+        if (!variant || nvmtl_vk_sampler_create_lod(&ns->_s, lo, hi, &variant->sampler)) {
             nvlog("sampler lod clamp variant FAILED - binding the sampler state's own clamps");
             return &ns->_s;
         }
-        ns->_lodClampSamplers[key] = [NSValue valueWithPointer:s];
-        return s;
+        ns->_lodClampSamplers[key] = variant;
+        // Cache eviction must not destroy a sampler referenced by recorded GPU work.
+        nvmtl_retain_resource(cb, variant);
+        return &variant->sampler;
     }
 }
 static NSDictionary *nvmtl_pixel_state_lod(NVMTLSamplerState *ns, float lo, float hi) {
@@ -2890,8 +2909,6 @@ static BOOL nvmtl_pixel_sampler_update(NSMutableDictionary *states, NSString *in
     if (d.depthAttachment.storeAction == MTLStoreActionCustomSampleDepthStore)
         _pass.depth_store_options |= MTLStoreActionOptionCustomSamplePositions;
     _pass.stencil_store_options = (uint32_t)d.stencilAttachment.storeActionOptions;
-    if (d.stencilAttachment.texture && _pass.stencil_store_options)
-        return [self nvmtlSamplePositionError:@"sample positions: stencil store options are illegal"];
     if ((_pass.depth_store_options | _pass.stencil_store_options) & ~MTLStoreActionOptionCustomSamplePositions)
         return [self nvmtlSamplePositionError:@"sample positions: unknown depth/stencil store options"];
 
@@ -3547,7 +3564,7 @@ static void nvmtl_unbind_texture(NVMTLCommandBuffer *cb, uint32_t set, uint32_t 
 }
 - (void)setFragmentSamplerState:(id<MTLSamplerState>)ss lodMinClamp:(float)lo lodMaxClamp:(float)hi atIndex:(NSUInteger)i {
     NVMTLSamplerState *ns = (NVMTLSamplerState *)ss;
-    nvk_sampler *samp = ns ? nvmtl_sampler_lod_clamp(ns, lo, hi) : NULL;
+    nvk_sampler *samp = ns ? nvmtl_sampler_lod_clamp(_cb, ns, lo, hi) : NULL;
     if (i >= 16 || nvmtl_vk_bind_sampler(&_cb->_c, NVMTL_SET_FRAGMENT, (uint32_t)i, samp)) {
         nvlog("setFragmentSamplerState:lodMinClamp: invalid index or bind failure"); return;
     }
@@ -3559,7 +3576,7 @@ static void nvmtl_unbind_texture(NVMTLCommandBuffer *cb, uint32_t set, uint32_t 
 }
 - (void)setVertexSamplerState:(id<MTLSamplerState>)ss lodMinClamp:(float)lo lodMaxClamp:(float)hi atIndex:(NSUInteger)i {
     NVMTLSamplerState *ns = (NVMTLSamplerState *)ss;
-    nvk_sampler *samp = ns ? nvmtl_sampler_lod_clamp(ns, lo, hi) : NULL;
+    nvk_sampler *samp = ns ? nvmtl_sampler_lod_clamp(_cb, ns, lo, hi) : NULL;
     if (i >= 16 || nvmtl_vk_bind_sampler(&_cb->_c, NVMTL_SET_VERTEX, (uint32_t)i, samp)) {
         nvlog("setVertexSamplerState:lodMinClamp: invalid index or bind failure"); return;
     }
@@ -3681,7 +3698,7 @@ static void nvmtl_unbind_texture(NVMTLCommandBuffer *cb, uint32_t set, uint32_t 
 }
 - (void)setStencilStoreActionOptions:(MTLStoreActionOptions)x {
     _pass.stencil_store_options = (uint32_t)x;
-    if (x) [self nvmtlSamplePositionError:@"stencil store options are illegal"];
+    if (x & ~MTLStoreActionOptionCustomSamplePositions) [self nvmtlSamplePositionError:@"unknown stencil store options"];
 }
 @end
 
@@ -4040,12 +4057,6 @@ void nvmtl_heap_back(NVMTLHeap *h, NSUInteger size, int shared) {
     MTLResourceID rid; rid._impl = _resid; return rid;
 }
 - (void)dealloc {
-    NSArray *variants;
-    @synchronized (self) { variants = _lodClampSamplers.allValues; _lodClampSamplers = nil; }
-    for (NSValue *v in variants) {
-        nvk_sampler *s = (nvk_sampler *)v.pointerValue;
-        if (s) { nvmtl_vk_sampler_destroy(s); free(s); }
-    }
     nvmtl_vk_sampler_destroy(&_s);
 }
 - (NSString *)label { return _label; }
@@ -4735,7 +4746,7 @@ static void nvmtl_zprobe_drain(void) {
     else [_samplers removeObjectForKey:key];
     if (was != now && ![was isEqual:now]) { _e78Key = nil; _e78VarSel = nil; }
     nvmtl_retain_resource(_cb, ns);
-    nvk_sampler *samp = ns ? nvmtl_sampler_lod_clamp(ns, lo, hi) : NULL;
+    nvk_sampler *samp = ns ? nvmtl_sampler_lod_clamp(_cb, ns, lo, hi) : NULL;
     if (nvmtl_vk_bind_sampler(&_cb->_c, NVMTL_SET_VERTEX, (uint32_t)i, samp))
         nvlog("compute setSamplerState:lodMinClamp: bind FAILED");
 }
@@ -5264,13 +5275,15 @@ destinationBytesPerImage:(NSUInteger)img options:(MTLBlitOption)opt {
     [_completionCondition unlock]; return value;
 }
 - (CFTimeInterval)kernelStartTime {
+    // CPU scheduling window of the first submission part, not GPU time or the whole multipart buffer.
+    // Readable by scheduled handlers; a later command-buffer error makes both kernel times zero.
     [_completionCondition lock];
-    CFTimeInterval value = _executionDone && !_cbError ? _legacyKernelStart : 0;
+    CFTimeInterval value = !_cbError ? _legacyKernelStart : 0;
     [_completionCondition unlock]; return value;
 }
 - (CFTimeInterval)kernelEndTime {
     [_completionCondition lock];
-    CFTimeInterval value = _executionDone && !_cbError ? _legacyKernelEnd : 0;
+    CFTimeInterval value = !_cbError ? _legacyKernelEnd : 0;
     [_completionCondition unlock]; return value;
 }
 - (void)waitUntilCompleted {
