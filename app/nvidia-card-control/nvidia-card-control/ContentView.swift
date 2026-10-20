@@ -20,6 +20,11 @@ struct ContentView: View {
         .task {
             await store.loadIfNeeded()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .gpuControlSelectSidebarCategory)) { note in
+            if let category = note.object as? SidebarCategory {
+                selection = category
+            }
+        }
         .overlay(alignment: .bottom) {
             if let message = store.lastErrorMessage {
                 banner(

@@ -1,7 +1,13 @@
 // Copyright (c) 2026 BlueMonkey
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import Foundation
 import SwiftUI
+
+extension Notification.Name {
+    /// Posted with a `SidebarCategory` object to select that sidebar row.
+    static let gpuControlSelectSidebarCategory = Notification.Name("gpuControlSelectSidebarCategory")
+}
 
 enum SidebarCategory: String, CaseIterable, Identifiable, Hashable {
     case status
