@@ -41,7 +41,7 @@ struct TestsView: View {
 
                 Section {
                     Button("Open test pattern") {
-                        openWindow(id: "stream-pattern")
+                        openWindow(id: StreamPatternWindow.id)
                     }
                     .accessibilityHint(
                         String(localized: "Opens a full-window animated pattern for streaming encode tests")
