@@ -6,3 +6,7 @@ build/
 .DS_Store
 builds/
 dot-app-builds/
+# Test executables built by scripts/build-tests.sh (keep catalog/docs tracked).
+/nvidia-card-control/nvidia-card-control/Tests/*
+!/nvidia-card-control/nvidia-card-control/Tests/manifest.tsv
+!/nvidia-card-control/nvidia-card-control/Tests/README.md
