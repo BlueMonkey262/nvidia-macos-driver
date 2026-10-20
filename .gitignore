@@ -11,3 +11,6 @@ __pycache__/
 .env
 *.pem
 id_*
+
+# Locally built telemetry helper.
+/tools/gpu_telemetry
