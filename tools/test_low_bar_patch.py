@@ -2,14 +2,13 @@
 """Check the optional --low-bar patch against the 2.2.0 H.264 encoder.
 
 The library is not in this repo. Set NVENC_H264_LIB to its path. Exit 77 when that
-file is missing. Stdlib only, plus objdump when it is on PATH. If unicorn and
-capstone import, also emulate the changed buf_alloc path.
+file is missing. If capstone imports, also check that jumps land on instruction
+starts. If unicorn and capstone import, also emulate the changed buf_alloc path.
 
 usage: NVENC_H264_LIB=/path/to/libnvenc_h264.dylib python3 tools/test_low_bar_patch.py
 """
 import importlib.util
 import os
-import shutil
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,10 +44,34 @@ def expect_exit(fn, note):
     fail(f"negative control returned normally ({note})")
 
 
-def ranges(image):
-    """Disassemble from known instruction starts and return addr -> (mnemonic, ops)."""
-    if not shutil.which("objdump"):
+def _capstone():
+    try:
+        from capstone import Cs, CS_ARCH_X86, CS_MODE_64
+        from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_REG_RIP
+    except ImportError:
         return None
+    md = Cs(CS_ARCH_X86, CS_MODE_64)
+    md.detail = True
+    return md, X86_OP_IMM, X86_OP_MEM, X86_REG_RIP
+
+
+def _target(insn, imm_type, mem_type, rip_reg):
+    if insn.mnemonic.startswith("j") or insn.mnemonic == "call":
+        for operand in insn.operands:
+            if operand.type == imm_type:
+                return operand.imm
+    for operand in insn.operands:
+        if operand.type == mem_type and operand.mem.base == rip_reg:
+            return insn.address + insn.size + operand.mem.disp
+    return None
+
+
+def ranges(image):
+    """Disassemble from known instruction starts and return addr -> (mnemonic, target)."""
+    got = _capstone()
+    if got is None:
+        return None
+    md, imm_type, mem_type, rip_reg = got
     slices = [
         (0x3770, 0x3AC0),                 # buf_alloc, includes the hook and both jump targets
         (nv.FREE_AT, nv.FREE_AT + len(CAVE)),
@@ -57,22 +80,18 @@ def ranges(image):
     ]
     out = {}
     for start, stop in slices:
-        rows, _ = nv.disassemble(image[start:stop], start)
-        for addr, _raw, mnem, ops in rows:
-            if mnem in ("(bad)", ""):
-                fail(f"objdump could not decode {addr:#x}")
-            if start <= addr < stop:
-                out[addr] = (mnem, ops)
+        for insn in md.disasm(bytes(image[start:stop]), start):
+            if start <= insn.address < stop:
+                out[insn.address] = (insn.mnemonic, _target(insn, imm_type, mem_type, rip_reg))
     return out
 
 
 def transfers(decoded):
     found = []
-    for addr, (mnem, ops) in sorted(decoded.items()):
+    for addr, (mnem, tgt) in sorted(decoded.items()):
         if mnem.startswith("j") or mnem == "call":
-            tgt = nv._abs_target(ops)
             if tgt is None:
-                fail(f"no target on {mnem} at {addr:#x}: {ops}")
+                fail(f"no target on {mnem} at {addr:#x}")
             found.append((addr, mnem, tgt))
     return found
 
@@ -107,7 +126,7 @@ def negative_boundary(image):
     bad[at + 1] = (bad[at + 1] + 1) & 0xFF
     decoded = ranges(bad)
     if decoded is None:
-        print("objdump missing; boundary negative control skipped")
+        print("capstone not importable; boundary negative control skipped")
         return
     try:
         check_boundaries(decoded)
@@ -129,19 +148,14 @@ def emulate(image):
         return
     cs = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
     caps = [insn.address for insn in cs.disasm(CAVE, nv.FREE_AT)]
-    decoded = ranges(image)
-    if decoded is None:
-        print("objdump not on PATH; buf_alloc emulation skipped")
-        return
-    cave_starts = sorted(a for a in decoded if nv.FREE_AT <= a < nv.FREE_AT + len(CAVE))
-    if caps != cave_starts:
-        fail(f"capstone cave boundaries {caps} != objdump {cave_starts}")
+    builtin = [insn.addr for insn in nv.decode(CAVE, nv.FREE_AT)]
+    if caps != builtin:
+        fail(f"capstone cave boundaries {caps} != built-in decoder {builtin}")
 
     def run(rbx, r15, unmap_eax):
         uc = Uc(UC_ARCH_X86, UC_MODE_64)
-        uc.mem_map(0, 0x10000)
+        uc.mem_map(0, 0x10000)   # covers __TEXT and the 0xb430/0xb494/0xb0d8 globals
         uc.mem_write(0, bytes(image[:0xA000]))
-        uc.mem_map(0xB000, 0x1000)
         uc.mem_write(0xB494, (0x77).to_bytes(4, "little"))
         uc.mem_map(0x600000, 0x1000)
         uc.mem_map(0x70000000, 0x20000)
@@ -221,13 +235,13 @@ def main():
         fail(f"low-bar touched bytes outside the hook and the cave: {sorted(set(changed) - allowed)[:8]}")
     decoded = ranges(patched)
     if decoded is None:
-        print("objdump not on PATH; decode and boundary checks skipped")
+        print("capstone not importable; decode and boundary checks skipped")
     else:
         if nv.LOW_BAR_HOOK not in decoded or decoded[nv.LOW_BAR_HOOK][0] != "jmp":
             fail(f"hook did not decode as jmp: {decoded.get(nv.LOW_BAR_HOOK)}")
         check_boundaries(decoded)
         negative_boundary(patched)
-        print("objdump: hook and cave decode; jumps land on instruction boundaries")
+        print("capstone: hook and cave decode; jumps land on instruction boundaries")
     mutated = bytearray(original)
     mutated[0x20] ^= 0xFF
     text = expect_exit(lambda: nv.patch(mutated, low_bar=True), "hash gate")
