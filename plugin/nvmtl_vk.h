@@ -191,6 +191,8 @@ int  nvmtl_vk_submit_wait_at(nvk_cmdbuf *c, const char *who);
 typedef struct nvmtl_inflight nvmtl_inflight;
 nvmtl_inflight *nvmtl_vk_inflight_new(void);
 void nvmtl_vk_inflight_free(nvmtl_inflight *f);
+// Transfer a failed (-2) submission to process-lifetime quarantine; do not finish or free it afterwards.
+void nvmtl_vk_inflight_quarantine(nvmtl_inflight *f);
 int nvmtl_vk_image_reback(nvk_image *i, int to_sysmem, int a8);
 void nvmtl_vk_res1_stats(uint64_t out[6]);
 int nvmtl_vk_image_migrate(nvk_image *i, int to_sysmem, int a8, nvk_image *old_out);

@@ -5685,9 +5685,19 @@ static void nvmtl_pre_drop(nvmtl_prologue *p)
     for (unsigned i = 0; i < p->nhold; i++) if (p->hold[i] && nvmtl_pre_release_hook) nvmtl_pre_release_hook(p->hold[i]);
     p->nhold = 0;
 }
-struct nvmtl_inflight { nvk_cmdbuf *c; VkFence fence; nvmtl_prologue pre; uint64_t pt[8]; };
+struct nvmtl_inflight { nvk_cmdbuf *c; VkFence fence; nvmtl_prologue pre; uint64_t pt[8]; struct nvmtl_inflight *next; };
 nvmtl_inflight *nvmtl_vk_inflight_new(void) { return calloc(1, sizeof(nvmtl_inflight)); }
 void nvmtl_vk_inflight_free(nvmtl_inflight *f) { free(f); }
+static pthread_mutex_t g_inflight_quarantine_lock = PTHREAD_MUTEX_INITIALIZER;
+static nvmtl_inflight *g_inflight_quarantine;
+void nvmtl_vk_inflight_quarantine(nvmtl_inflight *f)
+{
+    // -2 includes a timeout or missing witness, not just confirmed device loss. Keep the fence and prologue
+    // reachable for process lifetime: neither may be destroyed while the GPU could still be using them.
+    pthread_mutex_lock(&g_inflight_quarantine_lock);
+    f->next = g_inflight_quarantine; g_inflight_quarantine = f;
+    pthread_mutex_unlock(&g_inflight_quarantine_lock);
+}
 void nvmtl_vk_gsub_nvk_stats(uint64_t *out, unsigned n)
 {
     static void (*fn)(uint64_t *, unsigned); static int looked;
@@ -5752,6 +5762,7 @@ int nvmtl_vk_submit_begin_at(nvk_cmdbuf *c, nvmtl_inflight *f, const char *who)
     result = pvkCreateFence(g_dev, &fci, NULL, &fence);
     const uint64_t sC = nvmtl_perf_now();
     if (result != VK_SUCCESS) { nvmtl_cmd_retire(c); return -1; }
+    f->fence = fence;
     nvmtl_prologue *const pre = &f->pre;
     pthread_mutex_lock(&nvmtl_submit_mutex);
     if (pro && nvmtl_pre_submit_hook) {
@@ -5790,7 +5801,6 @@ int nvmtl_vk_submit_begin_at(nvk_cmdbuf *c, nvmtl_inflight *f, const char *who)
         nvlog("vk: queue submit -> %d; disabling backend and retaining uncertain in-flight resources", result);
         return -2;
     }
-    f->fence = fence;
     return 0;
 }
 int nvmtl_vk_submit_finish(nvmtl_inflight *f)
