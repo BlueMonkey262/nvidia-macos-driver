@@ -37,9 +37,12 @@ memcpy calls and the row-loop heads; caves sit in the padding after the t2d loop
 used) after the low-bar cave. Apply --low-bar in the same run when both are wanted: a later --low-bar refuses
 padding that is no longer empty.
 
-Optional --short-zero (off unless named): the status-buffer bzero every frame uses a 4096-byte length instead of
-the full 6.88 MB mapping. The CPU only reads the status header after the wait; a too-short clear would show up as
-a channel error or a bad picture, not a silently good stream.
+Optional --short-zero (off unless named): the status-buffer bzero uses a 4096-byte length instead of the full
+mapping. Labels: the call site is the one patched here (read from the library; the claim that it runs every frame is
+INFERRED, not measured). The mapping size is a runtime value of a global that the file holds as zeros, so it is not
+reproducible from this repository. That the CPU only reads the status header after the wait is INFERRED and has no
+in-repo evidence. ASSUMPTION, NOT CHECKED AT RUNTIME: the status buffer is at least 4096 bytes. The 7-byte site cannot
+hold a min(), so nothing in the patched library enforces it. Only the one test below shows the picture stays right.
 
 usage: make_nvenc_t2d.py [--keep-multi-ref] [--low-bar] [--direct-row] [--short-zero]
                          <libnvenc_h264.dylib> <out libnvenc_h264_t2d.dylib>
@@ -436,6 +439,10 @@ def _assert_cave_bounds():
         ("LUMA_CAVE", CAVE_L, LUMA_CAVE, DIRECT_AT[0]),
         ("CHROMA_CAVE", CAVE_C, CHROMA_CAVE, DIRECT_AT[1]),
         ("LOW_BAR_CAVE", FREE_AT, LOW_BAR_CAVE, DIRECT_AT[2]),
+        ("LUMA_DIRECT", DIRECT_AT[0], LUMA_DIRECT, CAVE_C),
+        ("CHROMA_DIRECT", DIRECT_AT[1], CHROMA_DIRECT, FREE_AT),
+        ("LUMA_RESTORE", DIRECT_AT[2], LUMA_RESTORE, DIRECT_AT[3]),
+        ("CHROMA_RESTORE", DIRECT_AT[3], CHROMA_RESTORE, FREE_END),
     )
     for name, start, blob, limit in checks:
         end = start + len(blob)
@@ -592,8 +599,15 @@ def _write_output(dst, data):
         with os.fdopen(fd, "wb") as out:
             fd = None
             out.write(data)
+            out.flush()
+            os.fsync(out.fileno())
         os.replace(tmp, dst)
         tmp = None
+        dirfd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(dirfd)
+        finally:
+            os.close(dirfd)
     finally:
         if fd is not None:
             os.close(fd)
