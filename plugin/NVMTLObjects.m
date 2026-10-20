@@ -2571,7 +2571,7 @@ static size_t nvmtl_fc_width(NSUInteger dataType)
                            : [self newFunctionWithName:name];
     if ([(id)f isKindOfClass:[NVMTLFunction class]]) {
         if (spec.length) ((NVMTLFunction *)f)->_specName = [spec copy];
-        if ([desc respondsToSelector:@selector(options)]) ((NVMTLFunction *)f)->_options = [desc options];
+        if ([desc respondsToSelector:@selector(options)]) ((NVMTLFunction *)f)->_options = [(MTLFunctionDescriptor *)desc options];
     }
     if (cv) return f;
     if (!f && error)
