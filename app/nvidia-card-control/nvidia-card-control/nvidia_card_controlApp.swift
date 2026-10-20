@@ -13,8 +13,10 @@ struct nvidia_card_controlApp: App {
             ContentView(store: store)
                 #if DEBUG
                 .onAppear {
-                    let failures = GPUTelemetryDecodingCheck.failures()
-                    assert(failures.isEmpty, "GPUTelemetry decode self-check failed: \(failures)")
+                    let telemetryFailures = GPUTelemetryDecodingCheck.failures()
+                    assert(telemetryFailures.isEmpty, "GPUTelemetry decode self-check failed: \(telemetryFailures)")
+                    let nudgeFailures = PointerNudgeLogicCheck.failures()
+                    assert(nudgeFailures.isEmpty, "Pointer nudge self-check failed: \(nudgeFailures)")
                 }
                 #endif
         }

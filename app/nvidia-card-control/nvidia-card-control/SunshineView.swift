@@ -1,18 +1,19 @@
 // Copyright (c) 2026 BlueMonkey
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import AppKit
 import SwiftUI
 
-/// MOCKUP: nothing here is connected to Sunshine yet. It shows the planned layout of the Sunshine page.
+/// Sunshine page: Pointer section is live; Service / Display / Encoding remain mockups.
 struct SunshineView: View {
     let store: DriverStore
+    @State private var pointerHelper = PointerHelperStore()
 
     @State private var startAtLogin = true
     @State private var captureDisplay = "Display 2 (mirrored, 1920 × 1080)"
     @State private var mirrorDisplays = true
     @State private var codec = "Automatic"
     @State private var bitrateCap = 40.0
-    @State private var keepPointerVisible = true
     @State private var retryEncoderStart = true
 
     private let displays = [
@@ -23,12 +24,8 @@ struct SunshineView: View {
 
     var body: some View {
         Form {
-            Section {
-                Label("Preview only: these controls are not connected to Sunshine yet.", systemImage: "hammer")
-                    .foregroundStyle(.secondary)
-            }
-
             Section("Service") {
+                mockBanner
                 LabeledContent("Sunshine") {
                     Label("Running", systemImage: "checkmark.circle.fill")
                         .symbolRenderingMode(.hierarchical)
@@ -45,6 +42,7 @@ struct SunshineView: View {
             }
 
             Section {
+                mockBanner
                 Picker("Capture display", selection: $captureDisplay) {
                     ForEach(displays, id: \.self) { Text($0).tag($0) }
                 }
@@ -56,6 +54,7 @@ struct SunshineView: View {
             }
 
             Section {
+                mockBanner
                 LabeledContent("Encoder", value: "VideoToolbox (hardware)")
                 Picker("Codec", selection: $codec) {
                     Text("Automatic").tag("Automatic")
@@ -79,12 +78,34 @@ struct SunshineView: View {
             }
 
             Section {
-                Toggle("Keep the pointer visible while typing", isOn: $keepPointerVisible)
+                Toggle(
+                    "Keep the pointer visible while typing",
+                    isOn: Binding(
+                        get: { pointerHelper.keepPointerVisibleWhileTyping },
+                        set: { newValue in
+                            Task { await pointerHelper.setEnabled(newValue) }
+                        }
+                    )
+                )
+                .disabled(pointerHelper.isBusy)
+
                 LabeledContent("Helper") {
-                    Label("Needs Accessibility access", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.secondary)
+                    Label(pointerHelper.status.label, systemImage: pointerHelper.status.systemImage)
+                        .foregroundStyle(helperForeground)
                 }
-                Button("Open Privacy Settings…") {}
+
+                if case .needsAccessibility = pointerHelper.status {
+                    Button("Open Privacy Settings…") {
+                        NSWorkspace.shared.open(pointerHelper.privacySettingsURL)
+                    }
+                }
+
+                if let message = pointerHelper.lastErrorMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } header: {
                 Text("Pointer")
             } footer: {
@@ -92,12 +113,32 @@ struct SunshineView: View {
             }
 
             Section("Troubleshooting") {
+                mockBanner
                 Button("Open Sunshine log") {}
                 Button("Reset Sunshine settings…", role: .destructive) {}
             }
         }
         .formStyle(.grouped)
         .navigationTitle("Sunshine")
+        .task {
+            await pointerHelper.loadIfNeeded()
+        }
+    }
+
+    private var mockBanner: some View {
+        Label("Preview only: these controls are not connected to Sunshine yet.", systemImage: "hammer")
+            .foregroundStyle(.secondary)
+    }
+
+    private var helperForeground: Color {
+        switch pointerHelper.status {
+        case .installedAndRunning:
+            return .primary
+        case .needsAccessibility, .error:
+            return .secondary
+        case .notInstalled:
+            return .secondary
+        }
     }
 }
 

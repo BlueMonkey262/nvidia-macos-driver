@@ -6,3 +6,7 @@ build/
 .DS_Store
 builds/
 dot-app-builds/
+
+# Built helper Mach-O (produce with app/scripts/build-pointer-helper.sh on macOS)
+pointer-helper/gpucontrol-pointerhelper
+nvidia-card-control/nvidia-card-control/gpucontrol-pointerhelper
