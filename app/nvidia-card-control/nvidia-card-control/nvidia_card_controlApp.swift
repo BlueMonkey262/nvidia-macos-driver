@@ -17,6 +17,8 @@ struct nvidia_card_controlApp: App {
                     assert(telemetryFailures.isEmpty, "GPUTelemetry decode self-check failed: \(telemetryFailures)")
                     let sunshineFailures = SunshineConfigCheck.failures()
                     assert(sunshineFailures.isEmpty, "SunshineConfig self-check failed: \(sunshineFailures)")
+                    let nudgeFailures = PointerNudgeLogicCheck.failures()
+                    assert(nudgeFailures.isEmpty, "Pointer nudge self-check failed: \(nudgeFailures)")
                 }
                 #endif
         }

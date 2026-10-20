@@ -15,7 +15,6 @@ enum SidebarCategory: String, CaseIterable, Identifiable, Hashable {
     case video
     case sunshine
     case performance
-    case pointer
     case logs
     case about
 
@@ -33,8 +32,6 @@ enum SidebarCategory: String, CaseIterable, Identifiable, Hashable {
             return "Sunshine"
         case .performance:
             return "Performance"
-        case .pointer:
-            return "Pointer"
         case .logs:
             return "Logs"
         case .about:
@@ -54,8 +51,6 @@ enum SidebarCategory: String, CaseIterable, Identifiable, Hashable {
             return "sun.max"
         case .performance:
             return "gauge.with.needle"
-        case .pointer:
-            return "cursorarrow"
         case .logs:
             return "doc.text.magnifyingglass"
         case .about:

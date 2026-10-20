@@ -3,8 +3,7 @@
 
 import SwiftUI
 
-/// Sunshine page. Service / Display / Encoding / Troubleshooting are live.
-/// Pointer remains a mockup here so `feat/pointer-helper` can own that section on merge.
+/// Sunshine page: Service, Display, Encoding, Pointer and Troubleshooting are all live.
 struct SunshineView: View {
     let store: DriverStore
     @State private var sunshine = SunshineStore()
@@ -13,7 +12,7 @@ struct SunshineView: View {
     @State private var fecDraft: Double = 20
     @State private var portDraft: Double = 47989
 
-    @State private var keepPointerVisible = true
+    @State private var pointerHelper = PointerHelperStore()
 
     var body: some View {
         Form {
@@ -22,14 +21,34 @@ struct SunshineView: View {
             encodingSection
 
             Section {
-                Label("Preview only: these controls are not connected to Sunshine yet.", systemImage: "hammer")
-                    .foregroundStyle(.secondary)
-                Toggle("Keep the pointer visible while typing", isOn: $keepPointerVisible)
+                Toggle(
+                    "Keep the pointer visible while typing",
+                    isOn: Binding(
+                        get: { pointerHelper.keepPointerVisibleWhileTyping },
+                        set: { newValue in
+                            Task { await pointerHelper.setEnabled(newValue) }
+                        }
+                    )
+                )
+                .disabled(pointerHelper.isBusy)
+
                 LabeledContent("Helper") {
-                    Label("Needs Accessibility access", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.secondary)
+                    Label(pointerHelper.status.label, systemImage: pointerHelper.status.systemImage)
+                        .foregroundStyle(helperForeground)
                 }
-                Button("Open Privacy Settings…") {}
+
+                if case .needsAccessibility = pointerHelper.status {
+                    Button("Open Privacy Settings…") {
+                        NSWorkspace.shared.open(pointerHelper.privacySettingsURL)
+                    }
+                }
+
+                if let message = pointerHelper.lastErrorMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } header: {
                 Text("Pointer")
             } footer: {
@@ -41,6 +60,7 @@ struct SunshineView: View {
         .formStyle(.grouped)
         .navigationTitle("Sunshine")
         .task {
+            await pointerHelper.loadIfNeeded()
             await sunshine.loadIfNeeded()
             sunshineNameDraft = sunshine.sunshineName
             fecDraft = Double(sunshine.fecPercentage)
@@ -472,6 +492,15 @@ struct SunshineView: View {
             }
             .disabled(sunshine.isBusy || isDefault)
             .accessibilityHint(String(localized: "Restore the Sunshine default for this setting"))
+        }
+    }
+
+    private var helperForeground: Color {
+        switch pointerHelper.status {
+        case .installedAndRunning:
+            return .primary
+        case .needsAccessibility, .error, .notInstalled:
+            return .secondary
         }
     }
 }
