@@ -233,7 +233,13 @@ nonisolated struct TestRunResult: Codable, Equatable, Identifiable, Sendable {
         id = try container.decode(String.self, forKey: .id)
         status = try container.decode(TestRunStatus.self, forKey: .status)
         started = try container.decode(String.self, forKey: .started)
-        durationSeconds = try container.decode(Double.self, forKey: .durationSeconds)
+        if let doubleDuration = try? container.decode(Double.self, forKey: .durationSeconds) {
+            durationSeconds = doubleDuration
+        } else if let intDuration = try? container.decode(Int.self, forKey: .durationSeconds) {
+            durationSeconds = Double(intDuration)
+        } else {
+            durationSeconds = 0
+        }
         summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
         details = try container.decodeIfPresent(String.self, forKey: .details) ?? ""
         hint = try container.decodeIfPresent(String.self, forKey: .hint)

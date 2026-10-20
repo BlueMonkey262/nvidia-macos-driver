@@ -157,7 +157,8 @@ enum StreamPatternRenderer {
         let rows = Int(ceil(bandHeight / cell))
         let frame = Int(time * 60)
 
-        var generator = SeededGenerator(seed: UInt64(bitPattern: Int64(frame &* 73856093 &+ sceneIndex &* 19349663)))
+        let seed = UInt64(UInt(bitPattern: frame)) &* 73856093 &+ UInt64(UInt(bitPattern: sceneIndex)) &* 19349663
+        var generator = SeededGenerator(seed: seed)
 
         for row in 0..<rows {
             for column in 0..<columns {
