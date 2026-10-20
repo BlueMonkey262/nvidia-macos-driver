@@ -5,7 +5,7 @@ import SwiftUI
 
 @main
 struct nvidia_card_controlApp: App {
-    @State private var store = AppStore()
+    @State private var store = DriverStore()
 
     var body: some Scene {
         WindowGroup {

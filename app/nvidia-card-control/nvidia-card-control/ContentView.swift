@@ -3,7 +3,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @Bindable var store: AppStore
+    @Bindable var store: DriverStore
     @State private var selection: SidebarCategory? = .status
 
     var body: some View {

@@ -3,7 +3,7 @@
 import SwiftUI
 
 struct DisplayView: View {
-    let store: AppStore
+    let store: DriverStore
     @State private var confirmClearCaches = false
     @State private var confirmRestartDesktop = false
 

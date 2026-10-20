@@ -54,7 +54,7 @@ struct ConfSettingChrome<Content: View>: View {
 struct ConfFlagToggle: View {
     let title: LocalizedStringKey
     let key: String
-    let store: AppStore
+    let store: DriverStore
 
     var body: some View {
         let entry = store.entry(for: key)

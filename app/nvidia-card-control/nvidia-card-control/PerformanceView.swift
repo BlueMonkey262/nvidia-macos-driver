@@ -3,7 +3,7 @@
 import SwiftUI
 
 struct PerformanceView: View {
-    let store: AppStore
+    let store: DriverStore
     @State private var headroomDraft: String = ""
     @State private var headroomError: String?
 

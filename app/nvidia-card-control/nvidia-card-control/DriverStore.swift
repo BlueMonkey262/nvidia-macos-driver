@@ -6,7 +6,7 @@ import Observation
 /// Main-actor store for driver status and settings.
 @MainActor
 @Observable
-final class AppStore {
+final class DriverStore {
     private(set) var status: DriverStatus?
     private(set) var confEntries: [ConfEntry] = []
     private(set) var cachesStatus: CachesStatus?
@@ -195,10 +195,10 @@ final class AppStore {
     }
 }
 
-extension AppStore {
+extension DriverStore {
     /// Preview store with sample data; does not invoke nvmtlctl.
-    static var preview: AppStore {
-        let store = AppStore()
+    static var preview: DriverStore {
+        let store = DriverStore()
         store.applyPreviewData()
         return store
     }

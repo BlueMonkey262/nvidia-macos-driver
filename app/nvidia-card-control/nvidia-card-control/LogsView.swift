@@ -4,7 +4,7 @@ import AppKit
 import SwiftUI
 
 struct LogsView: View {
-    let store: AppStore
+    let store: DriverStore
     @State private var lastCollectedFolder: URL?
 
     var body: some View {

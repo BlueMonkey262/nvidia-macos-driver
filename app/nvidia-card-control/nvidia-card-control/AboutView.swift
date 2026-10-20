@@ -3,7 +3,7 @@
 import SwiftUI
 
 struct AboutView: View {
-    let store: AppStore
+    let store: DriverStore
 
     var body: some View {
         Form {
