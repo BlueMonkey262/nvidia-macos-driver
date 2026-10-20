@@ -6,6 +6,8 @@ import SwiftUI
 struct AboutView: View {
     let store: DriverStore
 
+    private let upstreamURL = URL(string: "https://github.com/nullmoth/nvidia-macos-driver")
+
     var body: some View {
         Form {
             Section("NVIDIA Card Control") {
@@ -28,8 +30,19 @@ struct AboutView: View {
                     )
             }
 
+            Section("Credits") {
+                Text("Thank you to NullMoth for the upstream NVIDIA driver for macOS. This app and the fork it belongs to build on that work.")
+                    .fixedSize(horizontal: false, vertical: true)
+                if let upstreamURL {
+                    Link("NullMoth's driver on GitHub", destination: upstreamURL)
+                }
+                Text("This is an unofficial, community project. It is not affiliated with or endorsed by NVIDIA or NullMoth Systems.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("License") {
-                Text("Source-available, noncommercial (PolyForm Noncommercial 1.0.0). The owner decides copyright notices.")
+                Text("Copyright © 2026 BlueMonkey. Source-available, noncommercial (PolyForm Noncommercial 1.0.0).")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
