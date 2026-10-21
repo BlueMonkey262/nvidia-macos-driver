@@ -1,21 +1,50 @@
 // Build on macOS: clang -fobjc-arc -Wno-deprecated-declarations -framework Foundation -framework Metal \
-//   -framework IOSurface tools/test_metal_surface_wait.m -o test_metal_surface_wait
-// Run: ./test_metal_surface_wait [--timing [frames]] [event=0|event=1]
+//   -framework IOSurface -framework IOKit tools/test_metal_surface_wait.m -o test_metal_surface_wait
+// Run: ./test_metal_surface_wait [--timing [frames]] [event=0|event=1] [fault=query|fault=wait]
 // Compare identical timing runs with old/new plugin AND NVK. Exit 0 pass, 1 fail, 77 skip.
 // Internal wait counters make policy selection testable without a flaky CPU-time threshold.
 #include "nvmtl_surface_probe.h"
+#import <IOKit/IOKitLib.h>
+#include <pthread.h>
+
+static __thread unsigned observe_events, event_fault, event_queries, event_retries, event_faults;
+static kern_return_t (*original_scalar)(mach_port_t, uint32_t, const uint64_t *, uint32_t, uint64_t *, uint32_t *);
+static kern_return_t probe_scalar(mach_port_t, uint32_t, const uint64_t *, uint32_t, uint64_t *, uint32_t *);
+static pthread_once_t scalar_once = PTHREAD_ONCE_INIT;
+static void resolve_scalar(void) {
+    original_scalar = dlsym(RTLD_NEXT, "IOConnectCallScalarMethod");
+    if (!original_scalar || original_scalar == probe_scalar) {
+        fprintf(stderr, "FAIL resolve original IOConnectCallScalarMethod\n"); exit(1);
+    }
+}
+static kern_return_t probe_scalar(mach_port_t connection, uint32_t selector, const uint64_t *input,
+                                  uint32_t inputCount, uint64_t *output, uint32_t *outputCount) {
+    pthread_once(&scalar_once, resolve_scalar);
+    if (observe_events && selector == 6 && input && inputCount == 2) {
+        if (!input[1]) event_queries++;
+        if (input[1] == 200) event_retries++;
+        if ((event_fault == 1 && !input[1]) || (event_fault == 2 && input[1] == 200)) {
+            event_fault = 0; event_faults++; event_queries = event_retries = 0; return kIOReturnError;
+        }
+    }
+    return original_scalar(connection, selector, input, inputCount, output, outputCount);
+}
+__attribute__((used)) static const struct { const void *replacement, *original; } interpose_scalar
+    __attribute__((section("__DATA,__interpose"))) = {(const void *)probe_scalar, (const void *)IOConnectCallScalarMethod};
 
 int main(int argc, char **argv) { @autoreleasepool {
     int child = child_write(argc, argv); if (child >= 0) return child;
-    BOOL timing = NO; unsigned frames = 128; const char *event = NULL;
+    BOOL timing = NO; unsigned frames = 128, fault = 0; const char *event = NULL;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--timing")) {
             timing = YES;
             if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') frames = (unsigned)strtoul(argv[++i], NULL, 10);
         } else if (!strcmp(argv[i], "event=0") || !strcmp(argv[i], "event=1")) event = argv[i] + 6;
+        else if (!strcmp(argv[i], "fault=query")) fault = 1;
+        else if (!strcmp(argv[i], "fault=wait")) fault = 2;
         else return 1;
     }
-    if (!frames || frames > 1000000) return 1;
+    if (!frames || frames > 1000000 || (fault && (!event || strcmp(event, "1")))) return 1;
     // Release-plugin constructors clear inherited NVRM_*; override only after loading, before NVK initializes.
     void *plugin = dlopen("/Library/GPUBundles/NVMTLDriver.bundle/Contents/MacOS/NVMTLDriver", RTLD_NOW | RTLD_GLOBAL);
     if (!plugin) { fprintf(stderr, "SKIP installed NVMTL plugin unavailable\n"); return 77; }
@@ -42,15 +71,21 @@ int main(int argc, char **argv) { @autoreleasepool {
     if (!busy || !work || !bl) return 1;
     for (unsigned i = 0; i < 64; i++) [bl fillBuffer:busy range:NSMakeRange(0, busy.length) value:(uint8_t)i];
     [bl endEncoding]; [work commit]; [work waitUntilScheduled];
+    event_queries = event_retries = event_faults = 0; event_fault = fault;
     double start = cpu_seconds();
     for (unsigned i = 0; i < frames; i++) @autoreleasepool {
         id<MTLTexture> t = (i & 1) ? tb : ta; IOSurfaceRef s = (i & 1) ? b : a;
-        fill_surface(s, (unsigned char)i); surface_in(t);
+        fill_surface(s, (unsigned char)i);
+        observe_events = 1; surface_in(t); observe_events = 0;
         if (!timing && i < 32) verify(d, q, t, (unsigned char)i);
     }
     printf("modified CPU_us/frame=%.3f frames=%u size=%lux%lu event=%s\n", (cpu_seconds() - start) * 1e6 / frames,
            frames, (unsigned long)w, (unsigned long)h, event ?: "default");
     [work waitUntilCompleted]; check(work.status == MTLCommandBufferStatusCompleted, "busy GPU completed");
+    if (fault) {
+        check(!event_fault && event_faults == 1, "inject exactly one selector-6 error on the upload thread");
+        check(event_queries > 0 && event_retries > 0, "scoped event error permits a later scoped event wait");
+    }
     if (wait_stats) {
         wait_stats(after, 3);
         printf("scope_entries=%llu timed_sleeps=%llu event_waits=%llu\n", (unsigned long long)(after[0] - before[0]),

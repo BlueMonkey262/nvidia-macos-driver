@@ -17,8 +17,9 @@ power limit, and WindowServer already takes the event path by default.
 Synchronous IOSurface uploads additionally request a thread-local blocking policy
 from NVK: they skip the initial spin interval and use a 50-microsecond timed sleep
 when event waits are disabled or unavailable. Enabled event waits use a bounded
-200-microsecond interval for these uploads. This requires rebuilding both the
-plugin and NVK; an older NVK retains the previous policy. CPU and latency effects
+200-microsecond interval for these uploads. A scoped event query/wait error falls
+back for that call without disabling event waits process-wide. This requires
+rebuilding both the plugin and NVK; an older NVK retains the previous policy. CPU and latency effects
 of this scoped policy have not been VM-tested; the measurements below predate it.
 
 For a machine-local trial, back up `/Library/GPUBundles/nvmtl/nvrm610.conf`, then
