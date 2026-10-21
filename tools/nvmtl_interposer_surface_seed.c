@@ -11,12 +11,9 @@ static IOReturn (*original_unlock)(IOSurfaceRef, uint32_t, uint32_t *);
 static IOReturn probe_unlock(IOSurfaceRef, uint32_t, uint32_t *);
 static pthread_once_t unlock_once = PTHREAD_ONCE_INIT;
 static __thread int in_unlock;
-static void resolve_unlock(void) {
-    original_unlock = dlsym(RTLD_NEXT, "IOSurfaceUnlock");
-    if (!original_unlock || original_unlock == probe_unlock) {
-        fprintf(stderr, "FAIL resolve original IOSurfaceUnlock\n"); exit(1);
-    }
-}
+// Calls made from the interposing image itself are not redirected, so the original is called by name.
+// dlsym(RTLD_NEXT) finds nothing here: the framework is loaded before this dylib.
+static void resolve_unlock(void) { original_unlock = IOSurfaceUnlock; }
 static IOReturn probe_unlock(IOSurfaceRef s, uint32_t options, uint32_t *seed) {
     if (in_unlock) { fprintf(stderr, "FAIL recursive IOSurfaceUnlock interposition\n"); exit(1); }
     in_unlock = 1; pthread_once(&unlock_once, resolve_unlock);

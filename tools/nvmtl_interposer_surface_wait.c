@@ -14,12 +14,8 @@ static kern_return_t (*original_scalar)(mach_port_t, uint32_t, const uint64_t *,
 static kern_return_t probe_scalar(mach_port_t, uint32_t, const uint64_t *, uint32_t, uint64_t *, uint32_t *);
 static pthread_once_t scalar_once = PTHREAD_ONCE_INIT;
 static __thread int in_scalar;
-static void resolve_scalar(void) {
-    original_scalar = dlsym(RTLD_NEXT, "IOConnectCallScalarMethod");
-    if (!original_scalar || original_scalar == probe_scalar) {
-        fprintf(stderr, "FAIL resolve original IOConnectCallScalarMethod\n"); exit(1);
-    }
-}
+// Calls made from the interposing image itself are not redirected, so the original is called by name.
+static void resolve_scalar(void) { original_scalar = IOConnectCallScalarMethod; }
 static kern_return_t probe_scalar(mach_port_t connection, uint32_t selector, const uint64_t *input,
                                   uint32_t inputCount, uint64_t *output, uint32_t *outputCount) {
     if (in_scalar) { fprintf(stderr, "FAIL recursive IOConnectCallScalarMethod interposition\n"); exit(1); }
