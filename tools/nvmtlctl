@@ -393,8 +393,10 @@ test_run() {
         esac
         case $rc in 0) status=pass;; 77) status=skip;; 126|127) status=error;; *) status=fail;; esac
         if [ "$runner" = encode ] && [ "$status" = pass ] && [ "$correct" != 1 ]; then status=fail; summary='Encoder did not report a correct session'; fi
-        # -12908 alone is ambiguous; only recognized engine/map diagnostics justify this hint.
-        if [ "$status" != skip ] && LC_ALL=C grep -Eiq 'cpu map -> 0x51|engine bring-up failed|StartSession.*engine refused|engine already in use' "$work/output"; then
+        # -12908 alone is ambiguous; only recognized engine/map diagnostics justify this hint. A test that already
+        # passed with a correct session keeps its pass: "engine already in use in this process" is logged by a
+        # normal run too, so the log patterns may only explain a failure, never create one.
+        if { [ "$status" = fail ] || [ "$status" = error ]; } && LC_ALL=C grep -Eiq 'cpu map -> 0x51|engine bring-up failed|StartSession.*engine refused|engine already in use' "$work/output"; then
           status=fail
           hint="The card's BAR1 window is full: quit other GPU apps or restart the Mac, then run again."
         fi
