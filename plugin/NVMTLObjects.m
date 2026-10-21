@@ -2249,6 +2249,23 @@ NSDictionary *nvmtl_index_argument_fields(NSArray *fields) {
     }
     return [index copy];
 }
+// The app decides what object it hands to an argument encoder. A texture, sampler or pipeline from another
+// implementation, or a stale pointer that now holds some other object, may not implement gpuResourceID. Sending it
+// anyway raises an unrecognized-selector exception inside the app's frame and ends the app (No Man's Sky crash dumps of
+// 2026-10-18 and 2026-10-20: -[NVMTLArgumentEncoder setTexture:atIndex:] -> message forwarding -> objc_exception_throw).
+// Write a null handle instead and log the class, so the next report names the object.
+static uint64_t nvmtl_resid_or_zero(id obj, const char *what)
+{
+    if (!obj) return 0;
+    if ([obj respondsToSelector:@selector(gpuResourceID)]) {
+        MTLResourceID r = ((MTLResourceID (*)(id, SEL))objc_msgSend)(obj, @selector(gpuResourceID));
+        return r._impl;
+    }
+    static _Atomic unsigned said;
+    if (atomic_fetch_add(&said, 1) < 8)
+        nvlog("argument encoder: %s %p of class %s has no gpuResourceID - writing a null handle", what, (__bridge void *)obj, class_getName(object_getClass(obj)));
+    return 0;
+}
 @implementation NVMTLArgumentEncoder
 - (id<MTLDevice>)device { return (id<MTLDevice>)gNVMTLMainDevice; }
 - (NSString *)label { return _label; }
@@ -2302,7 +2319,7 @@ NSDictionary *nvmtl_index_argument_fields(NSArray *fields) {
     if (!_dst || !nvmtl_buf_cpu(_dst)) { nvlog("argument encoder: setTexture: no argument buffer set (or it is not host-visible)"); return; }
     NSDictionary *f = [self nvmtlFieldAt:index];
     if (!f) { nvlog("argument encoder: setTexture:atIndex:%lu — this function has no [[id(%lu)]] field — REFUSED", (unsigned long)index, (unsigned long)index); return; }
-    uint64_t handle = t ? [t gpuResourceID]._impl : 0;
+    uint64_t handle = nvmtl_resid_or_zero(t, "texture");
     const NSUInteger fieldOffset = [f[@"field_offset"] unsignedLongValue];
     const size_t size = _dst->_b.size;
     if (_dstOffset > size || fieldOffset > size - _dstOffset || 8 > size - _dstOffset - fieldOffset) {
@@ -2318,7 +2335,7 @@ NSDictionary *nvmtl_index_argument_fields(NSArray *fields) {
     if (!_dst || !nvmtl_buf_cpu(_dst)) { nvlog("argument encoder: setSamplerState: no argument buffer set (or it is not host-visible)"); return; }
     NSDictionary *f = [self nvmtlFieldAt:index];
     if (!f) { nvlog("argument encoder: setSamplerState:atIndex:%lu — this function has no [[id(%lu)]] field — REFUSED", (unsigned long)index, (unsigned long)index); return; }
-    uint64_t handle = s ? [s gpuResourceID]._impl : 0;
+    uint64_t handle = nvmtl_resid_or_zero(s, "sampler");
     const NSUInteger fieldOffset = [f[@"field_offset"] unsignedLongValue];
     const size_t size = _dst->_b.size;
     if (_dstOffset > size || fieldOffset > size - _dstOffset || 8 > size - _dstOffset - fieldOffset) {
@@ -2340,16 +2357,16 @@ NSDictionary *nvmtl_index_argument_fields(NSArray *fields) {
     memcpy((uint8_t *)nvmtl_buf_cpu(_dst) + _dstOffset + fo, &h, 8);
     nvtrace("AE %s id %lu -> %p+%lu handle 0x%llx", what, (unsigned long)index, (__bridge void *)_dst, (unsigned long)(_dstOffset + fo), (unsigned long long)h);
 }
-- (void)setRenderPipelineState:(id<MTLRenderPipelineState>)p atIndex:(NSUInteger)i { [self nvmtlPutHandle:p ? p.gpuResourceID._impl : 0 atIndex:i what:"RenderPipelineState"]; }
+- (void)setRenderPipelineState:(id<MTLRenderPipelineState>)p atIndex:(NSUInteger)i { [self nvmtlPutHandle:nvmtl_resid_or_zero(p, "render pipeline") atIndex:i what:"RenderPipelineState"]; }
 - (void)setRenderPipelineStates:(const id<MTLRenderPipelineState> __unsafe_unretained [])p withRange:(NSRange)r {
     for (NSUInteger k = 0; k < r.length; k++) [self setRenderPipelineState:p ? p[k] : nil atIndex:r.location + k]; }
-- (void)setComputePipelineState:(id<MTLComputePipelineState>)p atIndex:(NSUInteger)i { [self nvmtlPutHandle:p ? p.gpuResourceID._impl : 0 atIndex:i what:"ComputePipelineState"]; }
+- (void)setComputePipelineState:(id<MTLComputePipelineState>)p atIndex:(NSUInteger)i { [self nvmtlPutHandle:nvmtl_resid_or_zero(p, "compute pipeline") atIndex:i what:"ComputePipelineState"]; }
 - (void)setComputePipelineStates:(const id<MTLComputePipelineState> __unsafe_unretained [])p withRange:(NSRange)r {
     for (NSUInteger k = 0; k < r.length; k++) [self setComputePipelineState:p ? p[k] : nil atIndex:r.location + k]; }
 - (void)setIndirectCommandBuffer:(id<MTLIndirectCommandBuffer>)icb atIndex:(NSUInteger)index {
     { static int said; if (icb && !said++) nvlog("argument encoder: setIndirectCommandBuffer: writes the ICB's gpuResourceID; GPU-side ICB "
                                              "execution and encoding stay UNSUPPORTED (this ICB is a CPU replay list) (said once)"); }
-    [self nvmtlPutHandle:icb ? icb.gpuResourceID._impl : 0 atIndex:index what:"IndirectCommandBuffer"];
+    [self nvmtlPutHandle:nvmtl_resid_or_zero(icb, "indirect command buffer") atIndex:index what:"IndirectCommandBuffer"];
 }
 - (void)setIndirectCommandBuffers:(const id<MTLIndirectCommandBuffer> __unsafe_unretained [])b withRange:(NSRange)r {
     for (NSUInteger k = 0; k < r.length; k++) [self setIndirectCommandBuffer:b ? b[k] : nil atIndex:r.location + k]; }
