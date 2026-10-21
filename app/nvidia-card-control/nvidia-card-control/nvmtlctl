@@ -185,7 +185,8 @@ tests_init() {
   local here dir
   here=$(cd "$(dirname "$0")" && pwd) || return 1
   TEST_DIR=; TEST_MANIFEST=
-  for dir in "${NVMTL_TESTS_DIR:-}" "$here/Tests" "$here/../Resources/Tests" '/Library/Application Support/GPU Control/tests'; do
+  # Xcode copies resources flat, so inside the app bundle the manifest sits next to this script ("$here").
+  for dir in "${NVMTL_TESTS_DIR:-}" "$here/Tests" "$here" "$here/../Resources/Tests" '/Library/Application Support/GPU Control/tests'; do
     [ -n "$dir" ] && [ -r "$dir/manifest.tsv" ] || continue
     TEST_DIR=$dir; TEST_MANIFEST=$dir/manifest.tsv; return 0
   done
