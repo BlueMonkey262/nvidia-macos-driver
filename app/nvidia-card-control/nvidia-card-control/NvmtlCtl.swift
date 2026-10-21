@@ -1,6 +1,7 @@
 // Copyright (c) 2026 BlueMonkey
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import CryptoKit
 import Foundation
 
 /// Runs the `nvmtlctl` CLI off the main thread.
@@ -21,6 +22,7 @@ actor NvmtlCtl {
 
     enum ToolError: Error, LocalizedError, Equatable {
         case toolMissing
+        case rootToolMissing
         case timedOut(seconds: TimeInterval)
         case nonZeroExit(code: Int32, message: String)
         case invalidUTF8
@@ -31,6 +33,10 @@ actor NvmtlCtl {
             case .toolMissing:
                 return String(
                     localized: "Could not find nvmtlctl. Install it at /usr/local/bin/nvmtlctl, or confirm the app bundle includes the nvmtlctl resource."
+                )
+            case .rootToolMissing:
+                return String(
+                    localized: "This action needs administrator rights, and the app only runs the root-owned copy of nvmtlctl in /Library/Application Support/GPU Control/bin. That copy is missing or failed its check. Run sudo ./fork-install.sh from the driver package, then try again."
                 )
             case .timedOut(let seconds):
                 let wholeSeconds = Int(seconds)
@@ -52,6 +58,8 @@ actor NvmtlCtl {
 
     static let systemToolPath = "/usr/local/bin/nvmtlctl"
     static let bundledResourceName = "nvmtlctl"
+    static let rootToolDirectory = "/Library/Application Support/GPU Control/bin"
+    static let rootToolPath = rootToolDirectory + "/nvmtlctl"
 
     private let fileManager: FileManager
     private let defaultTimeout: TimeInterval
@@ -73,6 +81,36 @@ actor NvmtlCtl {
             }
         }
         return nil
+    }
+
+    /// The only copy that may run as administrator: root-owned, not writable by anyone else, in a root-owned
+    /// directory, and matching the sha256 that `fork-install.sh` recorded next to it. A copy in the app bundle
+    /// or in /usr/local/bin can be replaced by a non-admin account, so it is never run with elevated rights.
+    func verifiedRootToolPath() -> String? {
+        func ownedByRoot(_ path: String, directory: Bool) -> Bool {
+            guard let attrs = try? fileManager.attributesOfItem(atPath: path),
+                  let type = attrs[.type] as? FileAttributeType,
+                  type == (directory ? .typeDirectory : .typeRegular),
+                  (attrs[.ownerAccountID] as? NSNumber)?.intValue == 0,
+                  let mode = (attrs[.posixPermissions] as? NSNumber)?.intValue,
+                  mode & 0o022 == 0 else {
+                return false
+            }
+            return true
+        }
+        let path = Self.rootToolPath
+        guard ownedByRoot("/Library/Application Support/GPU Control", directory: true),
+              ownedByRoot(Self.rootToolDirectory, directory: true),
+              ownedByRoot(path, directory: false),
+              ownedByRoot(path + ".sha256", directory: false),
+              fileManager.isExecutableFile(atPath: path),
+              let recorded = try? String(contentsOfFile: path + ".sha256", encoding: .utf8),
+              let expected = recorded.split(separator: " ").first.map(String.init),
+              let data = fileManager.contents(atPath: path) else {
+            return nil
+        }
+        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        return actual == expected ? path : nil
     }
 
     func status() async throws -> DriverStatus {
@@ -136,8 +174,8 @@ actor NvmtlCtl {
         timeout: TimeInterval? = nil
     ) async throws -> RunResult {
         try Task.checkCancellation()
-        guard let toolPath = resolveToolPath() else {
-            throw ToolError.toolMissing
+        guard let toolPath = asRoot ? verifiedRootToolPath() : resolveToolPath() else {
+            throw asRoot ? ToolError.rootToolMissing : ToolError.toolMissing
         }
 
         let timeoutSeconds = timeout ?? defaultTimeout

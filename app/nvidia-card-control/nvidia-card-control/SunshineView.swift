@@ -52,7 +52,7 @@ struct SunshineView: View {
             } header: {
                 Text("Pointer")
             } footer: {
-                Text("macOS hides the pointer while you type and Sunshine moves it without bringing it back. The helper shows it again.")
+                Text("macOS hides the pointer while you type, and a streamed mouse move does not bring it back. After you stop typing, the helper briefly opens a small GPU Control app, which makes macOS show the pointer again. You may see its icon in the Dock for a moment. Updating the helper asks for Accessibility access again.")
             }
 
             troubleshootingSection
