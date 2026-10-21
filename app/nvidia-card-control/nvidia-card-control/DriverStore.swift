@@ -14,6 +14,8 @@ final class DriverStore {
     /// When the last good telemetry sample arrived; used for the 5 s stale mark.
     private(set) var telemetrySampleDate: Date?
     private(set) var isTelemetryStale = false
+    /// Why the last telemetry request failed; nil after a good sample. Shown on the Status page so a failure is not silent.
+    private(set) var telemetryErrorMessage: String?
     private(set) var confEntries: [ConfEntry] = []
     private(set) var cachesStatus: CachesStatus?
     private(set) var toolPath: String?
@@ -195,10 +197,12 @@ final class DriverStore {
             telemetry = sample
             telemetrySampleDate = Date()
             isTelemetryStale = false
+            telemetryErrorMessage = nil
         } catch is CancellationError {
             return
         } catch {
-            // Keep the last good sample; surface age via isTelemetryStale only.
+            // Keep the last good sample; surface age via isTelemetryStale and the reason via telemetryErrorMessage.
+            telemetryErrorMessage = presentableError(error)
             refreshTelemetryStaleFlag()
         }
     }

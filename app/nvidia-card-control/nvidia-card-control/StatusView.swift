@@ -21,6 +21,12 @@ struct StatusView: View {
                         telemetry: store.telemetry,
                         isStale: store.isTelemetryStale
                     )
+                    if let reason = store.telemetryErrorMessage {
+                        Label(String(localized: "Live GPU readings failed: \(reason)"), systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .listRowBackground(Color.clear)
                 healthSection(status)
