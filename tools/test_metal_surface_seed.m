@@ -1,33 +1,13 @@
-// Build on macOS: clang -fobjc-arc -Wno-deprecated-declarations -framework Foundation -framework Metal \
-//   -framework IOSurface tools/test_metal_surface_seed.m -o test_metal_surface_seed
-// Run with the installed plugin: ./test_metal_surface_seed [--timing [frames]]
-// Exit 0 pass, 1 fail, 77 skip. Compare identical --timing runs on old/new plugins.
-// The old seed skip already passes the ordinary cases. The injected unlock-error retry fails on old.
+// Build on macOS, from the repo root (two steps; the dylib must stay beside the executable):
+// clang -std=c11 -dynamiclib -framework IOSurface -install_name @rpath/libnvmtl_surface_seed_interposer.dylib -o libnvmtl_surface_seed_interposer.dylib tools/nvmtl_interposer_surface_seed.c
+// clang -fobjc-arc -Wno-deprecated-declarations -framework Foundation -framework Metal -framework IOSurface tools/test_metal_surface_seed.m libnvmtl_surface_seed_interposer.dylib -Wl,-rpath,@executable_path -o test_metal_surface_seed
+// Harness: build the .c dylib separately without nm_shim.h; add its path and
+// -Wl,-rpath,@executable_path to the existing .m build/link args (keep -include nm_shim.h).
+// Run: ./test_metal_surface_seed [--timing [frames]]
+// Exit 0 pass, 1 fail, 77 skip. Ordinary skip cases already passed the old plugin;
+// the linked interposer makes the unlock-error retry discriminate old/new.
 #include "nvmtl_surface_probe.h"
-#include <pthread.h>
-
-static _Atomic int fail_unlock, omit_unlock_seed;
-static IOSurfaceRef fault_surface;
-static IOReturn (*original_unlock)(IOSurfaceRef, uint32_t, uint32_t *);
-static IOReturn probe_unlock(IOSurfaceRef, uint32_t, uint32_t *);
-static pthread_once_t unlock_once = PTHREAD_ONCE_INIT;
-static __thread int in_unlock;
-static void resolve_unlock(void) {
-    original_unlock = dlsym(RTLD_NEXT, "IOSurfaceUnlock");
-    if (!original_unlock || original_unlock == probe_unlock) {
-        fprintf(stderr, "FAIL resolve original IOSurfaceUnlock\n"); exit(1);
-    }
-}
-static IOReturn probe_unlock(IOSurfaceRef s, uint32_t options, uint32_t *seed) {
-    if (in_unlock) { fprintf(stderr, "FAIL recursive IOSurfaceUnlock interposition\n"); exit(1); }
-    in_unlock = 1; pthread_once(&unlock_once, resolve_unlock);
-    BOOL omit = s == fault_surface && options == kIOSurfaceLockReadOnly && atomic_exchange(&omit_unlock_seed, 0);
-    IOReturn rc = original_unlock(s, options, omit ? NULL : seed);
-    if (s == fault_surface && options == kIOSurfaceLockReadOnly && atomic_exchange(&fail_unlock, 0)) rc = kIOReturnError;
-    in_unlock = 0; return rc;
-}
-__attribute__((used)) static const struct { const void *replacement, *original; } interpose_unlock
-    __attribute__((section("__DATA,__interpose"))) = {(const void *)probe_unlock, (const void *)IOSurfaceUnlock};
+#include "nvmtl_interposer_surface.h"
 
 int main(int argc, char **argv) { @autoreleasepool {
     int child = child_write(argc, argv); if (child >= 0) return child;
@@ -58,14 +38,14 @@ int main(int argc, char **argv) { @autoreleasepool {
     external_write(argv[0], a, 67); n = submits(); surface_in(ta);
     check(submits() > n, "cross-process modification uploads"); verify(d, q, ta, 67);
     // Finish the real unlock, then report an error once. The plugin must leave its cache invalid.
-    fill_surface(a, 72); fault_surface = a; atomic_store(&fail_unlock, 1); surface_in(ta);
-    check(!atomic_load(&fail_unlock), "read-only unlock fault reached import");
-    fault_surface = NULL; n = submits(); surface_in(ta);
+    fill_surface(a, 72); nvmtl_seed_fault_surface = a; atomic_store(&nvmtl_seed_fail_unlock, 1); surface_in(ta);
+    check(!atomic_load(&nvmtl_seed_fail_unlock), "read-only unlock fault reached import");
+    nvmtl_seed_fault_surface = NULL; n = submits(); surface_in(ta);
     check(submits() > n, "failed unlock retries import rather than caching uncertain state"); verify(d, q, ta, 72);
     // Model a successful read-only unlock that leaves its seed out-parameter untouched.
-    fill_surface(a, 84); fault_surface = a; atomic_store(&omit_unlock_seed, 1); surface_in(ta);
-    check(!atomic_load(&omit_unlock_seed), "read-only unlock omitted seed once");
-    fault_surface = NULL; n = submits(); surface_in(ta);
+    fill_surface(a, 84); nvmtl_seed_fault_surface = a; atomic_store(&nvmtl_seed_omit_unlock_seed, 1); surface_in(ta);
+    check(!atomic_load(&nvmtl_seed_omit_unlock_seed), "read-only unlock omitted seed once");
+    nvmtl_seed_fault_surface = NULL; n = submits(); surface_in(ta);
     check(submits() == n, "unwritten unlock seed preserves unchanged-surface skip"); verify(d, q, ta, 84);
     start = cpu_seconds();
     for (unsigned i = 0; i < frames; i++) { fill_surface(a, (unsigned char)i); surface_in(ta); }
