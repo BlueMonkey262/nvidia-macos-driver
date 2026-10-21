@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.4.2-v0.3
+
+Fork overlay on the upstream 2.4.2 package. Upstream's installer is unchanged. `package/fork-install.sh` runs after it and can copy GPU Control.app into /Applications, install a root-owned `nvmtlctl`, and record this version in `/Library/NullMoth/fork-version`. `package/fork-uninstall.sh` removes those pieces only.
+
+The Turing H.264 and HEVC encode work in this tree is described in [docs/H264.md](docs/H264.md) and [docs/HEVC.md](docs/HEVC.md). The shader-cache sweep, the power-source report, and the boot guard are the upstream 2.4 and 2.3.1 notes below.
+
 ## 2.4.2
 
 - Fix the black screen and the startup that stops on the verbose text after updating to 2.4 or 2.4.1. The display driver checks for a part of the display interface that the 2.4 and 2.4.1 core driver was built without, so it refused to start and the screen never moved off the startup text. 2.4.2 builds the core driver with it again; nothing else changes.

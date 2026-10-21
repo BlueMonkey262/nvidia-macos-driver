@@ -8,6 +8,7 @@ Every cell is one Metal method; [what the colors mean and how the map is made](d
 > affiliated with NullMoth Systems.** It tracks upstream and adds a few changes, listed in [FORK.md](FORK.md):
 > hardware H.264 encode on Turing (RTX 20 / GTX 16) and its regression test. The license is unchanged
 > (source-available, noncommercial; see [License](#license)). Downloads, support and the 1401 app are upstream's.
+> This tree is the v2.4.2-v0.3 overlay on upstream v2.4.2.
 
 A Metal driver for NVIDIA GeForce cards on macOS 15 Sequoia (Intel Macs and OpenCore PCs). It is source-available and noncommercial; the
 kernel extensions, the Metal plugin and the shader translator are in this repository. The 1401 app that installs it
@@ -153,7 +154,32 @@ The first shows 4 lines; the second shows your GeForce with Metal: supported.
 Nothing in the driver touches other disks. OpenCore's picker boots Windows (`ScanPolicy` 0 or including NTFS) and Linux
 (`OpenLinuxBoot.efi` in `UEFI → Drivers`, `LauncherOption = Full`) alongside macOS.
 
+## Fork overlay (v2.4.2-v0.3)
+
+`install.sh` is upstream's and still installs the driver. When it has finished, from the same folder:
+
+```bash
+sudo ./fork-install.sh
+```
+
+That copies `GPU Control.app` into `/Applications` when the app is next to the script, installs a root-owned
+`nvmtlctl` at `/Library/Application Support/GPU Control/bin`, and writes `/Library/NullMoth/fork-version`. It does
+not change the driver files. If the app is not in the folder, that copy is skipped and the script says so.
+
+The app is unsigned. The first time you open it, right-click it, choose Open, then Open. Or use System Settings →
+Privacy & Security → Open Anyway. The script does not sign the app or clear the quarantine flag.
+
+To remove those pieces and leave the driver installed:
+
+```bash
+sudo ./fork-uninstall.sh
+```
+
+It then tells you to run `sudo ./uninstall.sh` if you want the driver removed as well.
+
 ## Uninstall
+
+Remove the fork pieces first with `sudo ./fork-uninstall.sh` (see above). The driver itself:
 
 ```bash
 sudo ./uninstall.sh && sudo shutdown -r now

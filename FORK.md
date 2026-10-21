@@ -1,5 +1,7 @@
 # About this fork
 
+The overlay release is **v2.4.2-v0.3**, on upstream v2.4.2. `package/install.sh` and `package/uninstall.sh` are upstream's. After a successful install, `package/fork-install.sh` adds the fork pieces; `package/fork-uninstall.sh` removes only those.
+
 Personal fork of [nullmoth/nvidia-macos-driver](https://github.com/nullmoth/nvidia-macos-driver). The code is
 **source-available, noncommercial** (PolyForm Noncommercial 1.0.0 for `plugin/`, `kexts/`, `build/`, `package/`;
 LGPL-3.0-or-later for `translator/`; MIT for the Mesa changes; NVIDIA's license for the firmware). `NOTICE` and all
@@ -13,7 +15,7 @@ Nothing here has been run on other cards, and macOS 26 is untested.
 | Change | Where | Status |
 |---|---|---|
 | Hardware H.264 encode on Turing | `plugin/NVMTLDevice.m` (gate), `tools/make_nvenc_t2d.py` | see [docs/H264.md](docs/H264.md) |
-| Hardware HEVC encode on Turing, opt-in | `plugin/NVMTLDevice.m`, `tools/make_nvenc_hevc_t2d.py` | experimental, not tested on hardware; see [docs/HEVC.md](docs/HEVC.md) |
+| Hardware HEVC encode on Turing, opt-in | `plugin/NVMTLDevice.m`, `tools/make_nvenc_hevc_t2d.py` | opt-in; VM-tested on the reference card; see [docs/HEVC.md](docs/HEVC.md) |
 | H.264 encode regression test | `tools/nvenc_psnr.m`, `tools/test_nvenc_h264.py` | see [docs/H264.md](docs/H264.md) |
 | Contribution policy: AI-assisted code is welcome | `AGENTS.md`, `CONTRIBUTING.md`, templates | n/a |
 
