@@ -1,7 +1,7 @@
 // Telemetry transport/schema smoke test; no Metal methods are changed by this feature.
 // Build: clang -fobjc-arc -Wall -Wextra -framework Foundation tools/test_metal_telemetry.m -o .scratch/test_metal_telemetry
 // Run from repo root after building tools/gpu_telemetry: .scratch/test_metal_telemetry
-// When the card is up, also runs tools/gpu_telemetry --poll and prints clock/fan/power/util on stderr.
+// When the card is up, also runs --poll and --stream (3 live lines in 4s, SIGTERM within 1s).
 // Exit: 0 pass, 1 fail, 77 skip (RM/device not available, after checking error JSON).
 // Copyright (c) 2026 BlueMonkey
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
@@ -10,6 +10,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <errno.h>
+#include <dispatch/dispatch.h>
 
 static int failures;
 static void expect(BOOL ok, NSString *what)
@@ -100,6 +104,113 @@ static void printDecode(NSString *label, NSDictionary *sample)
     }
 }
 
+static BOOL liveSample(NSDictionary *sample)
+{
+    if (![sample[@"schema_version"] isEqual:@1]) return NO;
+    for (NSString *key in @[@"clock_graphics_mhz", @"clock_memory_mhz", @"clock_video_mhz",
+            @"power_draw_w", @"power_limit_w", @"gpu_utilization_percent", @"memory_utilization_percent"])
+        if (![sample[key] isKindOfClass:NSNumber.class]) return NO;
+    NSArray *fan = sample[@"fan_rpm_slots"];
+    if (![fan isKindOfClass:NSArray.class]) return NO;
+    BOOL spinning = NO;
+    for (id rpm in fan)
+        if ([rpm isKindOfClass:NSNumber.class] && [rpm doubleValue] > 0) spinning = YES;
+    if (!spinning) return NO;
+    if (![sample[@"clock_sm_mhz"] isKindOfClass:NSDictionary.class]) return NO;
+    NSDictionary *rusd = sample[@"rusd"];
+    if (![rusd isKindOfClass:NSDictionary.class] || ![rusd[@"timestamps"] isKindOfClass:NSDictionary.class]) return NO;
+    if (![sample[@"sample_index"] isKindOfClass:NSNumber.class]) return NO;
+    return YES;
+}
+
+static void checkStream(NSString *probe)
+{
+    NSTask *task = [NSTask new];
+    task.executableURL = [NSURL fileURLWithPath:probe];
+    task.arguments = @[@"--stream"];
+    NSPipe *outPipe = [NSPipe pipe];
+    NSPipe *inPipe = [NSPipe pipe]; // held open so stdin is not an immediate EOF
+    task.standardOutput = outPipe;
+    task.standardInput = inPipe;
+    task.standardError = [NSFileHandle fileHandleWithNullDevice];
+    NSError *error = nil;
+    if (![task launchAndReturnError:&error]) { expect(NO, error.localizedDescription); return; }
+    int fd = outPipe.fileHandleForReading.fileDescriptor;
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    NSMutableData *acc = [NSMutableData data];
+    NSMutableArray *lines = [NSMutableArray array];
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:4];
+    while (deadline.timeIntervalSinceNow > 0) {
+        struct pollfd pfd = { .fd = fd, .events = POLLIN };
+        poll(&pfd, 1, 100);
+        uint8_t tmp[8192];
+        ssize_t n = read(fd, tmp, sizeof tmp);
+        if (n > 0) [acc appendBytes:tmp length:(NSUInteger)n];
+        else if (n == 0) break;
+        NSRange nl;
+        while ((nl = [acc rangeOfData:[NSData dataWithBytes:"\n" length:1] options:0 range:NSMakeRange(0, acc.length)]).location != NSNotFound) {
+            NSData *piece = [acc subdataWithRange:NSMakeRange(0, nl.location)];
+            [acc replaceBytesInRange:NSMakeRange(0, nl.location + 1) withBytes:NULL length:0];
+            if (!piece.length) continue;
+            id obj = [NSJSONSerialization JSONObjectWithData:piece options:0 error:NULL];
+            if ([obj isKindOfClass:NSDictionary.class]) [lines addObject:obj];
+        }
+    }
+    NSUInteger live = 0;
+    NSNumber *prev = nil;
+    BOOL indexOk = YES;
+    for (NSDictionary *sample in lines) {
+        if (liveSample(sample)) live++;
+        NSNumber *idx = sample[@"sample_index"];
+        if (![idx isKindOfClass:NSNumber.class] || (prev && idx.unsignedLongLongValue <= prev.unsignedLongLongValue))
+            indexOk = NO;
+        prev = [idx isKindOfClass:NSNumber.class] ? idx : prev;
+    }
+    expect(live >= 3, [NSString stringWithFormat:@"at least 3 live stream lines in 4s (got %lu of %lu)",
+                       (unsigned long)live, (unsigned long)lines.count]);
+    expect(indexOk && prev != nil, @"monotonic sample_index");
+    NSDictionary *first = nil, *second = nil;
+    for (NSDictionary *sample in lines) {
+        if ([sample[@"sample_index"] isEqual:@1]) first = sample;
+        if ([sample[@"sample_index"] isEqual:@2]) second = sample;
+    }
+    expect(first[@"gpu_name"] != nil && second != nil && second[@"gpu_name"] == nil, @"identity on line 1 only");
+    expect(first[@"process_vram"] != nil && second != nil && second[@"process_vram"] == nil, @"process VRAM not on line 2");
+    pid_t pid = task.processIdentifier;
+    expect(kill(pid, 0) == 0, @"stream still running before SIGTERM");
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+        [task waitUntilExit];
+        dispatch_semaphore_signal(done);
+    });
+    kill(pid, SIGTERM);
+    BOOL exited = dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC))) == 0;
+    if (!exited) kill(pid, SIGKILL);
+    expect(exited, @"stream exited within 1s of SIGTERM");
+    fprintf(stderr, "STREAM lines=%lu live=%lu\n", (unsigned long)lines.count, (unsigned long)live);
+}
+
+static void checkStreamUsage(NSString *cli)
+{
+    NSTask *task = [NSTask new];
+    task.executableURL = [NSURL fileURLWithPath:cli];
+    task.arguments = @[@"telemetry"];
+    NSPipe *outPipe = [NSPipe pipe];
+    task.standardOutput = outPipe;
+    task.standardError = [NSFileHandle fileHandleWithNullDevice];
+    NSError *error = nil;
+    if (![task launchAndReturnError:&error]) { expect(NO, error.localizedDescription); return; }
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
+    while (task.running && deadline.timeIntervalSinceNow > 0) [NSThread sleepForTimeInterval:0.02];
+    if (task.running) { kill(task.processIdentifier, SIGKILL); expect(NO, @"usage hung"); return; }
+    [task waitUntilExit];
+    expect(task.terminationStatus == 2, @"telemetry without --json/--stream is usage");
+    NSData *bytes = [outPipe.fileHandleForReading readDataToEndOfFile];
+    NSString *text = [[NSString alloc] initWithData:bytes encoding:NSUTF8StringEncoding] ?: @"";
+    expect([text containsString:@"telemetry --stream"], @"usage documents telemetry --stream");
+}
+
 int main(void)
 {
     @autoreleasepool {
@@ -116,14 +227,16 @@ int main(void)
         validate(run(cli, @[@"--json", @"telemetry"], 0, 20));
         run(cli, @[@"telemetry"], 2, 20);
         run(cli, @[@"telemetry", @"--json", @"unexpected"], 2, 20);
+        checkStreamUsage(cli);
         if (available) {
             NSDictionary *polled = run(probe, @[@"--poll"], 0, 25);
             validate(polled);
             if (polled) printDecode(@"POLL", polled);
             else fprintf(stderr, "POLL: no JSON\n");
+            checkStream(probe);
         }
         if (failures) return 1;
-        puts(available ? "PASS telemetry schema, repeated calls, cleanup, CLI argument handling" : "SKIP card unavailable; error JSON and CLI checks passed");
+        puts(available ? "PASS telemetry schema, repeated calls, cleanup, CLI, poll and stream" : "SKIP card unavailable; error JSON and CLI checks passed");
         return available ? 0 : 77;
     }
 }

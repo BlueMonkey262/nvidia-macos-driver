@@ -1,7 +1,8 @@
 #!/bin/bash
 # nvmtlctl: status, settings, cache clearing and log collection for the NVIDIA Metal driver on macOS.
 # Meant for people and for a GUI to drive (every read command has --json). Commands that change things need sudo.
-#   nvmtlctl telemetry --json          read-only RM metrics (requires gpu_telemetry next to this CLI)
+#   nvmtlctl telemetry --json          one-shot RM metrics (requires gpu_telemetry next to this CLI)
+#   nvmtlctl telemetry --stream        resident 1 Hz JSON lines; SIGTERM, SIGINT or stdin EOF stops it
 #   nvmtlctl status [--json]            driver, macOS, GPU, plugin and encoder state
 #   nvmtlctl conf list [--json]         known settings and their current values in nvrm610.conf
 #   nvmtlctl conf get KEY | set KEY VALUE | unset KEY
@@ -21,7 +22,7 @@ CONF=/Library/GPUBundles/nvmtl/nvrm610.conf
 KEYFILE=$NM/cache-key
 JSON=0; DRY=0
 
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 need_root() { [ "$(id -u)" = 0 ] || { echo "nvmtlctl: this needs sudo" >&2; exit 3; }; }
 jesc() { local t; t=$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'); t=${t//$'\n'/\\n}; t=${t//$'\t'/\\t}; printf '%s' "$t"; }
 jstr() { printf '"%s"' "$(jesc "$1")"; }
@@ -75,8 +76,16 @@ cmd_status() {
 }
 
 cmd_telemetry() {
-  [ $JSON = 1 ] && [ $# = 0 ] || usage
   local probe; probe="$(cd "$(dirname "$0")" && pwd)/gpu_telemetry"
+  # --stream is already JSON lines. Keep stdin open: /dev/null is an immediate EOF.
+  if [ $# = 1 ] && [ "$1" = "--stream" ]; then
+    if [ ! -x "$probe" ]; then
+      printf '{"schema_version":1,"probe":{"error":"probe_not_installed"}}\n'
+      return 1
+    fi
+    exec "$probe" --stream
+  fi
+  [ $JSON = 1 ] && [ $# = 0 ] || usage
   if [ ! -x "$probe" ]; then
     printf '{"schema_version":1,"probe":{"error":"probe_not_installed"}}\n'
     return 1

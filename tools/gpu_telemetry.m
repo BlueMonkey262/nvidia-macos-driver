@@ -6,15 +6,26 @@
  *   tools/gpu_telemetry.m -o tools/gpu_telemetry
  * ./tools/gpu_telemetry
  * ./tools/gpu_telemetry --poll
- *   Default is off and sends no poll request (alloc polledDataMask stays 0).
- *   --poll, after a successful class 0xde alloc, sends NV00DE_CTRL_CMD_REQUEST_DATA_POLL
- *   (0xde0001) for CLOCK|PERF|POWER|FAN, waits up to 2s for valid sequences, copies
- *   them, then frees the object so the firmware request ends with this client.
- *   It does not send REQUEST_POLL_INTERVAL (0xde0002). While the object is alive,
- *   GSP samples those sections at the driver's default interval (500 ms, or 100 ms
- *   on Tesla, unless RMRusdPollingInterval is set). That is one GSP RPC on request
- *   and another on free, and it can raise idle power or wake the GPU from a deeper
- *   idle until the object is freed. --poll uses a 17s alarm; the default stays 15s.
+ * ./tools/gpu_telemetry --stream
+ *   Default sends no poll request (alloc polledDataMask stays 0).
+ *   --poll and --stream arm NV00DE_CTRL_CMD_REQUEST_DATA_POLL (0xde0001) with mask
+ *   75 (CLOCK|PERF|POWER|FAN). Neither sends REQUEST_POLL_INTERVAL (0xde0002).
+ *   GSP then samples those sections at its default interval (500 ms, or 100 ms on
+ *   Tesla, unless RMRusdPollingInterval is set): one RPC to arm, one to drop the
+ *   mask when the object is freed. That can raise idle power or wake the GPU
+ *   until this process frees the object.
+ *   --poll waits at most 1s, and only for clock, util, instantaneous power, the
+ *   power limit and fan. power_average is read if present and never waited on.
+ *   --stream keeps one RM client, arms once, and writes one JSON object per line
+ *   at 1 Hz (no faster; firmware cadence is 0.5s). The first line waits at most
+ *   ~600 ms. Sections that are still invalid are marked immediately. Name, UUID
+ *   and versions are on line 1 and every 10th line; per-process VRAM is on line 1
+ *   and every 5th line. Each line has sample_index and rusd.timestamps.
+ *   SM clock is labeled sm_clock_not_published (a 0 reading is not a clock).
+ *   Exit: SIGTERM, SIGINT, stdin EOF, or EPIPE on stdout. The handler only sets
+ *   a flag (async-signal-safe); the main thread then unmaps, frees class 0xde,
+ *   and frees the root client so the GSP poll stops. Do not point stdin at
+ *   /dev/null: that is an immediate EOF. --stream has no 15s alarm.
  * Copyright (c) 2026 BlueMonkey
  * SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
  */
@@ -30,6 +41,7 @@
 #include <sys/sysctl.h>
 #include <string.h>
 #include <time.h>
+#include <poll.h>
 #include <nvos.h>
 #include <nv_escape.h>
 #include <nv-unix-nvos-params-wrappers.h>
@@ -59,6 +71,8 @@ static char timeoutJSON[262144];
 static volatile sig_atomic_t timeoutLength;
 
 static int wantPoll;
+static volatile sig_atomic_t stopRequested;
+static int stopPipe[2] = {-1, -1};
 static NSDictionary *failure(NvU32 status) { return @{@"error": @(status), @"domain": errorDomain}; }
 static NSDictionary *failureCall(NvU32 status, NSString *call)
 {
@@ -381,6 +395,44 @@ static void applyRusdFailure(NSDictionary *err)
 
 // CLOCK|PERF covers clocks and gpu/memory utilisation; POWER covers draw, average, and limits; FAN covers RPM slots.
 enum { kRusdPollMask = NV00DE_RUSD_POLL_CLOCK | NV00DE_RUSD_POLL_PERF | NV00DE_RUSD_POLL_POWER | NV00DE_RUSD_POLL_FAN };
+_Static_assert(kRusdPollMask == 75, "stream poll mask is CLOCK|PERF|POWER|FAN");
+
+static BOOL fastSectionsReady(const NV00DE_SHARED_DATA *s)
+{
+    // power_average stays invalid on this GPU; it must not gate a sample.
+    return seqPublished(&s->clkPublicDomainInfos) && seqPublished(&s->perfDevUtil) &&
+        seqPublished(&s->instPowerUsage) && seqPublished(&s->powerLimitGpu) &&
+        seqPublished(&s->fanCoolerStatus);
+}
+
+static void fillRusdMetrics(const NV00DE_SHARED_DATA *s, NSMutableDictionary *timestamps)
+{
+#define READ_SHARED(type, field, ...) do { type value; if (readShared(&s->field, &value, sizeof value)) { \
+        timestamps[@#field] = @(value.lastModifiedTimestamp); __VA_ARGS__; } } while (0)
+    READ_SHARED(RUSD_CLK_PUBLIC_DOMAIN_INFOS, clkPublicDomainInfos, {
+        NSArray *keys = @[@"clock_graphics_mhz", @"clock_memory_mhz", @"clock_video_mhz"];
+        for (NvU32 i = 0; i < 3 && i < RUSD_CLK_PUBLIC_DOMAIN_MAX_TYPE; i++)
+            if (value.info[i].actualClkKHz != 0xffffffffu)
+                output[keys[i]] = @(value.info[i].actualClkKHz / 1000.0);
+    });
+    output[@"clock_sm_mhz"] = unavailable(@"sm_clock_not_published"); // Slot reads 0; not an SM clock.
+    READ_SHARED(RUSD_PERF_DEVICE_UTILIZATION, perfDevUtil, {
+        if (value.info.gpuPercentBusy <= 100) output[@"gpu_utilization_percent"] = @(value.info.gpuPercentBusy);
+        if (value.info.memoryPercentBusy <= 100) output[@"memory_utilization_percent"] = @(value.info.memoryPercentBusy);
+    });
+    READ_SHARED(RUSD_INST_POWER_USAGE, instPowerUsage, { output[@"power_draw_w"] = @(value.info.instGpuPower / 1000.0); });
+    READ_SHARED(RUSD_AVG_POWER_USAGE, avgPowerUsage, { output[@"power_average_w"] = @(value.info.averageGpuPower / 1000.0); });
+    READ_SHARED(RUSD_POWER_LIMITS, powerLimitGpu, {
+        output[@"power_limit_w"] = @(value.info.enforcedmW / 1000.0);
+        output[@"power_limit_requested_w"] = @(value.info.requestedmW / 1000.0);
+    });
+    READ_SHARED(RUSD_FAN_COOLER_STATUS, fanCoolerStatus, {
+        NSMutableArray *rpm = [NSMutableArray array];
+        for (NvU32 i = 0; i < RUSD_FAN_COOLER_MAX_COOLERS; i++) [rpm addObject:@(value.info.rpmCurr[i])];
+        output[@"fan_rpm_slots"] = rpm; // No validity mask/count; zero can mean absent or stopped.
+    });
+#undef READ_SHARED
+}
 
 static void sharedInfo(void)
 {
@@ -436,21 +488,16 @@ static void sharedInfo(void)
             checkpoint(@"rusd_poll_wait");
             struct timespec start, now;
             clock_gettime(CLOCK_MONOTONIC, &start);
-            while (!seqPublished(&s->clkPublicDomainInfos) || !seqPublished(&s->perfDevUtil) ||
-                   !seqPublished(&s->instPowerUsage) || !seqPublished(&s->avgPowerUsage) ||
-                   !seqPublished(&s->powerLimitGpu) || !seqPublished(&s->fanCoolerStatus)) {
+            while (!fastSectionsReady(s)) {
                 clock_gettime(CLOCK_MONOTONIC, &now);
                 double elapsed = (double)(now.tv_sec - start.tv_sec) + (double)(now.tv_nsec - start.tv_nsec) / 1e9;
-                if (elapsed >= 2.0) break;
+                if (elapsed >= 1.0) break;
                 usleep(50000);
             }
             clock_gettime(CLOCK_MONOTONIC, &now);
             waitMs = (int)((now.tv_sec - start.tv_sec) * 1000 + (now.tv_nsec - start.tv_nsec) / 1000000);
-            BOOL ready = seqPublished(&s->clkPublicDomainInfos) && seqPublished(&s->perfDevUtil) &&
-                seqPublished(&s->instPowerUsage) && seqPublished(&s->avgPowerUsage) &&
-                seqPublished(&s->powerLimitGpu) && seqPublished(&s->fanCoolerStatus);
             rusd[@"poll_wait_ms"] = @(waitMs);
-            rusd[@"poll_sequences"] = ready ? @"valid" : @"timeout";
+            rusd[@"poll_sequences"] = fastSectionsReady(s) ? @"valid" : @"timeout";
             rusd[@"poll_valid"] = @{@"clock": @(seqPublished(&s->clkPublicDomainInfos)),
                 @"util": @(seqPublished(&s->perfDevUtil)),
                 @"power_draw": @(seqPublished(&s->instPowerUsage)),
@@ -459,30 +506,7 @@ static void sharedInfo(void)
                 @"fan": @(seqPublished(&s->fanCoolerStatus))};
         }
         output[@"rusd"] = rusd;
-#define READ_SHARED(type, field, ...) do { type value; if (readShared(&s->field, &value, sizeof value)) { \
-        timestamps[@#field] = @(value.lastModifiedTimestamp); __VA_ARGS__; } } while (0)
-        READ_SHARED(RUSD_CLK_PUBLIC_DOMAIN_INFOS, clkPublicDomainInfos, {
-            NSArray *keys = @[@"clock_graphics_mhz", @"clock_memory_mhz", @"clock_video_mhz", @"clock_sm_mhz"];
-            for (NvU32 i = 0; i < RUSD_CLK_PUBLIC_DOMAIN_MAX_TYPE; i++)
-                if (value.info[i].actualClkKHz != 0xffffffffu)
-                    output[keys[i]] = @(value.info[i].actualClkKHz / 1000.0);
-        });
-        READ_SHARED(RUSD_PERF_DEVICE_UTILIZATION, perfDevUtil, {
-            if (value.info.gpuPercentBusy <= 100) output[@"gpu_utilization_percent"] = @(value.info.gpuPercentBusy);
-            if (value.info.memoryPercentBusy <= 100) output[@"memory_utilization_percent"] = @(value.info.memoryPercentBusy);
-        });
-        READ_SHARED(RUSD_INST_POWER_USAGE, instPowerUsage, { output[@"power_draw_w"] = @(value.info.instGpuPower / 1000.0); });
-        READ_SHARED(RUSD_AVG_POWER_USAGE, avgPowerUsage, { output[@"power_average_w"] = @(value.info.averageGpuPower / 1000.0); });
-        READ_SHARED(RUSD_POWER_LIMITS, powerLimitGpu, {
-            output[@"power_limit_w"] = @(value.info.enforcedmW / 1000.0);
-            output[@"power_limit_requested_w"] = @(value.info.requestedmW / 1000.0);
-        });
-        READ_SHARED(RUSD_FAN_COOLER_STATUS, fanCoolerStatus, {
-            NSMutableArray *rpm = [NSMutableArray array];
-            for (NvU32 i = 0; i < RUSD_FAN_COOLER_MAX_COOLERS; i++) [rpm addObject:@(value.info.rpmCurr[i])];
-            output[@"fan_rpm_slots"] = rpm; // No validity mask/count in public struct; zero can mean absent or stopped.
-        });
-#undef READ_SHARED
+        fillRusdMetrics(s, timestamps);
     }
     if (address) {
         checkpoint(@"unmap_rusd");
@@ -511,6 +535,266 @@ static void sharedInfo(void)
     }
 }
 
+static void onStop(int sig)
+{
+    (void)sig;
+    stopRequested = 1;
+    if (stopPipe[1] >= 0) {
+        char byte = 1;
+        ssize_t n = write(stopPipe[1], &byte, 1); // async-signal-safe; flag is already set if this blocks
+        (void)n;
+    }
+}
+
+static double monoNow(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+// YES means stop. Watches the signal pipe and stdin EOF without calling RM.
+static BOOL waitOrStop(double seconds)
+{
+    double end = monoNow() + seconds;
+    while (!stopRequested) {
+        double left = end - monoNow();
+        if (left <= 0) return NO;
+        struct pollfd fds[2];
+        nfds_t nfd = 0;
+        if (stopPipe[0] >= 0) { fds[nfd].fd = stopPipe[0]; fds[nfd].events = POLLIN; nfd++; }
+        fds[nfd].fd = STDIN_FILENO; fds[nfd].events = POLLIN; nfd++;
+        int ms = (int)(left * 1000.0);
+        if (ms < 1) ms = 1;
+        int rc = poll(fds, nfd, ms);
+        if (rc < 0 && errno == EINTR) continue;
+        if (stopRequested) return YES;
+        if (rc <= 0) continue;
+        for (nfds_t i = 0; i < nfd; i++) {
+            if (fds[i].fd != STDIN_FILENO || !fds[i].revents) continue;
+            if (fds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) { stopRequested = 1; return YES; }
+            char buf[256];
+            ssize_t n = read(STDIN_FILENO, buf, sizeof buf);
+            if (n == 0 || (n < 0 && errno != EAGAIN && errno != EINTR)) { stopRequested = 1; return YES; }
+        }
+    }
+    return YES;
+}
+
+static BOOL waitFastOrStop(const NV00DE_SHARED_DATA *s, double limit)
+{
+    double end = monoNow() + limit;
+    while (!fastSectionsReady(s)) {
+        double left = end - monoNow();
+        if (left <= 0) return NO;
+        if (waitOrStop(left > 0.05 ? 0.05 : left)) return YES;
+    }
+    return NO;
+}
+
+static BOOL writeLine(NSDictionary *obj)
+{
+    NSData *data = [NSJSONSerialization dataWithJSONObject:obj options:NSJSONWritingSortedKeys error:NULL];
+    if (!data) return NO;
+    const char *bytes = data.bytes;
+    size_t off = 0;
+    while (off < data.length) {
+        ssize_t n = write(STDOUT_FILENO, bytes + off, data.length - off);
+        if (n > 0) off += (size_t)n;
+        else if (n < 0 && errno == EINTR) continue;
+        else return NO; // EPIPE once SIGPIPE is ignored
+    }
+    char nl = '\n';
+    for (;;) {
+        ssize_t n = write(STDOUT_FILENO, &nl, 1);
+        if (n == 1) return YES;
+        if (n < 0 && errno == EINTR) continue;
+        return NO;
+    }
+}
+
+static NvHandle rusdHandle;
+static io_connect_t rusdMapConn;
+static int rusdMapFd = -1;
+static mach_vm_address_t rusdAddress;
+static BOOL rusdRmMapped;
+static NvP64 rusdLinear;
+
+static void releaseStream(void)
+{
+    if (rusdAddress && rusdMapConn) {
+        IOConnectUnmapMemory64(rusdMapConn, 0, mach_task_self(), rusdAddress);
+        rusdAddress = 0;
+    }
+    if (rusdRmMapped && client && rusdHandle && connection) {
+        NVOS34_PARAMETERS unmap = { .hClient = client, .hDevice = subdevice, .hMemory = rusdHandle,
+            .pLinearAddress = rusdLinear, .status = NV_ERR_GENERIC };
+        NvU32 st = escape(connection, NV_ESC_RM_UNMAP_MEMORY, &unmap, sizeof unmap);
+        (void)st;
+        rusdRmMapped = NO;
+    }
+    if (rusdMapConn) { IOServiceClose(rusdMapConn); rusdMapConn = 0; }
+    if (rusdMapFd >= 0) { close(rusdMapFd); rusdMapFd = -1; }
+    if (client && rusdHandle && connection) {
+        NVOS00_PARAMETERS freeShared = { .hRoot = client, .hObjectOld = rusdHandle, .status = NV_ERR_GENERIC };
+        NvU32 st = escape(connection, NV_ESC_RM_FREE, &freeShared, sizeof freeShared);
+        (void)st;
+        rusdHandle = 0;
+    }
+    if (client && connection) {
+        NVOS00_PARAMETERS freeRoot = { .hRoot = client, .hObjectOld = client, .status = NV_ERR_GENERIC };
+        NvU32 st = escape(connection, NV_ESC_RM_FREE, &freeRoot, sizeof freeRoot);
+        (void)st;
+        client = 0;
+    }
+    if (connection) { IOServiceClose(connection); connection = 0; }
+    if (boundFd >= 0) { close(boundFd); boundFd = -1; }
+}
+
+static void seedFast(uint64_t index)
+{
+    output = [NSMutableDictionary dictionary];
+    output[@"schema_version"] = @1;
+    output[@"sample_index"] = @(index);
+    output[@"timestamp_unix_s"] = @([NSDate date].timeIntervalSince1970);
+    output[@"setup"] = @"ok";
+    output[@"probe"] = @"complete";
+    NSArray *keys = @[@"temperature_core_c", @"temperature_memory_c", @"temperature_hotspot_c", @"thermal_sensors",
+        @"fan_rpm_slots", @"fan_percent", @"clock_graphics_mhz", @"clock_memory_mhz", @"clock_video_mhz",
+        @"clock_graphics_max_mhz", @"clock_memory_max_mhz", @"clock_video_max_mhz", @"clock_level_info_raw", @"clock_pmumon",
+        @"power_draw_w", @"power_average_w", @"power_limit_w", @"power_limit_requested_w", @"performance_state",
+        @"gpu_utilization_percent", @"memory_utilization_percent", @"vram_total_bytes", @"vram_heap_bytes",
+        @"vram_used_bytes", @"vram_free_bytes", @"bar1_total_bytes", @"bar1_used_bytes", @"bar1_free_bytes",
+        @"bar1_largest_free_bytes", @"pcie_generation", @"pcie_width", @"nvrm_clients_by_pid",
+        @"bar1_grant_mapped_bytes", @"bar1_grant_budget_bytes"];
+    for (NSString *key in keys) output[key] = unavailable(@"not_attempted");
+    for (NSString *key in @[@"fan_percent", @"temperature_hotspot_c", @"clock_graphics_max_mhz",
+            @"clock_memory_max_mhz", @"clock_video_max_mhz", @"nvrm_clients_by_pid"])
+        output[key] = unavailable(@"no_verified_public_abi");
+    output[@"clock_sm_mhz"] = unavailable(@"sm_clock_not_published");
+}
+
+static void finishNotAttempted(void)
+{
+    for (NSString *key in output.allKeys) {
+        id value = output[key];
+        if ([value isKindOfClass:NSDictionary.class] && [value[@"error"] isEqual:@"not_attempted"])
+            output[key] = unavailable(@"not_exposed_or_cache_invalid");
+    }
+    [output removeObjectForKey:@"stage"];
+    output[@"probe"] = @"complete";
+}
+
+static int openSession(void)
+{
+    NvU32 st = openControl(&connection, &boundFd);
+    if (!st) st = allocObject(0, &client, NV01_ROOT_CLIENT, NULL, 0);
+    NV0000_CTRL_GPU_GET_ATTACHED_IDS_PARAMS ids = {0};
+    if (!st) st = QUERY(client, NV0000_CTRL_CMD_GPU_GET_ATTACHED_IDS, ids);
+    if (!st && ids.gpuIds[0] == 0xffffffffu) st = NV_ERR_OBJECT_NOT_FOUND;
+    NV0000_CTRL_GPU_GET_ID_INFO_V2_PARAMS idInfo = { .gpuId = ids.gpuIds[0] };
+    if (!st) st = QUERY(client, NV0000_CTRL_CMD_GPU_GET_ID_INFO_V2, idInfo);
+    NV0080_ALLOC_PARAMETERS dp = { .deviceId = idInfo.deviceInstance, .hClientShare = client };
+    NV2080_ALLOC_PARAMETERS sp = { .subDeviceId = idInfo.subDeviceInstance };
+    if (!st) st = allocObject(client, &device, NV01_DEVICE_0, &dp, sizeof dp);
+    if (!st) st = allocObject(device, &subdevice, NV20_SUBDEVICE_0, &sp, sizeof sp);
+    return (int)st;
+}
+
+static void grantInfo(void);
+
+static int streamMain(void)
+{
+    @autoreleasepool {
+        output = [NSMutableDictionary dictionary];
+        if (pipe(stopPipe) != 0) return 1;
+        fcntl(stopPipe[0], F_SETFD, FD_CLOEXEC);
+        fcntl(stopPipe[1], F_SETFD, FD_CLOEXEC);
+        int flags = fcntl(stopPipe[1], F_GETFL, 0);
+        if (flags >= 0) fcntl(stopPipe[1], F_SETFL, flags | O_NONBLOCK);
+        flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+        if (flags >= 0) fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+        struct sigaction action = {0};
+        action.sa_handler = onStop;
+        sigemptyset(&action.sa_mask);
+        action.sa_flags = SA_RESTART;
+        sigaction(SIGTERM, &action, NULL);
+        sigaction(SIGINT, &action, NULL);
+        signal(SIGPIPE, SIG_IGN);
+
+        NvU32 st = (NvU32)openSession();
+        const NV00DE_SHARED_DATA *shared = NULL;
+        if (!st) {
+            NvHandle handle = 0x71000003;
+            NV00DE_ALLOC_PARAMETERS ap = { .polledDataMask = 0 };
+            st = allocObject(subdevice, &handle, RM_USER_SHARED_DATA, &ap, sizeof ap);
+            if (!st) {
+                rusdHandle = handle;
+                NV00DE_CTRL_REQUEST_DATA_POLL_PARAMS req = { .polledDataMask = kRusdPollMask };
+                st = control(rusdHandle, NV00DE_CTRL_CMD_REQUEST_DATA_POLL, &req, sizeof req);
+            }
+            if (!st) {
+                nv_ioctl_nvos33_parameters_with_fd map = { .params = { .hClient = client, .hDevice = subdevice,
+                    .hMemory = rusdHandle, .length = sizeof(NV00DE_SHARED_DATA),
+                    .flags = NVOS33_FLAGS_ACCESS_READ_ONLY, .status = NV_ERR_GENERIC } };
+                st = openControl(&rusdMapConn, &rusdMapFd);
+                if (!st) {
+                    map.fd = rusdMapFd;
+                    st = escape(connection, NV_ESC_RM_MAP_MEMORY, &map, sizeof map);
+                    if (!st) st = map.params.status;
+                    rusdRmMapped = st == NV_OK;
+                    if (rusdRmMapped) rusdLinear = map.params.pLinearAddress;
+                }
+                if (!st) {
+                    mach_vm_size_t length = 0;
+                    errorDomain = @"iokit";
+                    kern_return_t kr = IOConnectMapMemory64(rusdMapConn, 0, mach_task_self(), &rusdAddress, &length,
+                                                           kIOMapAnywhere | kIOMapReadOnly);
+                    if (kr) { rusdAddress = 0; st = kr; }
+                    else if (length < sizeof(NV00DE_SHARED_DATA)) {
+                        errorDomain = @"probe"; st = NV_ERR_INVALID_LIMIT;
+                    } else shared = (const NV00DE_SHARED_DATA *)(uintptr_t)rusdAddress;
+                }
+            }
+        }
+        if (st || !shared) {
+            NSDictionary *err = failureCall(st ? st : NV_ERR_INVALID_STATE, @"stream_setup");
+            writeLine(@{@"schema_version": @1, @"sample_index": @0, @"probe": @"complete",
+                @"setup": err, @"timestamp_unix_s": @([NSDate date].timeIntervalSince1970)});
+            releaseStream();
+            return 0;
+        }
+        for (uint64_t index = 1; !stopRequested; index++) {
+            double started = monoNow();
+            if (index == 1 && waitFastOrStop(shared, 0.6)) break;
+            if (stopRequested) break;
+            seedFast(index);
+            grantInfo();
+            if (stopRequested) break;
+            memoryInfo();
+            if (stopRequested) break;
+            linkInfo();
+            if (stopRequested) break;
+            thermalInfo();
+            if (stopRequested) break;
+            perfInfo();
+            if (stopRequested) break;
+            NSMutableDictionary *timestamps = [NSMutableDictionary dictionary];
+            output[@"rusd"] = [@{@"polled_data_mask_requested": @(kRusdPollMask),
+                @"freshness": @"unverified", @"timestamps": timestamps} mutableCopy];
+            fillRusdMetrics(shared, timestamps);
+            if (index == 1 || index % 10 == 0) identity();
+            if (index == 1 || index % 5 == 0) processInfo();
+            finishNotAttempted();
+            if (!writeLine(output)) break;
+            double left = 1.0 - (monoNow() - started);
+            if (left > 0 && waitOrStop(left)) break;
+        }
+        releaseStream();
+    }
+    return 0;
+}
+
 static void grantInfo(void)
 {
     NSArray *names = @[@"debug.nvrmfb_vram_mapped_bytes", @"debug.nvrmfb_vram_budget_bytes"];
@@ -527,13 +811,17 @@ static void grantInfo(void)
 
 int main(int argc, char **argv)
 {
+    int mode = 0;
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--poll")) wantPoll = 1;
+        if (!strcmp(argv[i], "--poll") && mode == 0) mode = 1;
+        else if (!strcmp(argv[i], "--stream") && mode == 0) mode = 2;
         else {
             fputs("{\"schema_version\":1,\"probe\":{\"domain\":\"probe\",\"error\":\"unknown_argument\",\"call\":\"args\"}}\n", stdout);
             return 0;
         }
     }
+    wantPoll = mode == 1;
+    if (mode == 2) return streamMain();
     @autoreleasepool {
         output = [NSMutableDictionary dictionaryWithDictionary:@{@"schema_version": @1,
             @"timestamp_unix_s": @([NSDate date].timeIntervalSince1970)}];
@@ -556,7 +844,7 @@ int main(int argc, char **argv)
         if (sigaction(SIGALRM, &action, NULL)) {
             errorDomain = @"posix"; output[@"setup"] = failure((NvU32)errno);
         } else {
-            alarm(wantPoll ? 17 : 15);
+            alarm(15);
             grantInfo();
             NvU32 st = openControl(&connection, &boundFd);
             if (!st) st = allocObject(0, &client, NV01_ROOT_CLIENT, NULL, 0);
