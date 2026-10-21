@@ -8,7 +8,7 @@
 #
 # Exact compile (also what this script runs):
 #   swiftc -parse-as-library -O -target x86_64-apple-macosx15.0 \
-#     -framework Foundation -framework CoreGraphics -framework ApplicationServices \
+#     -framework Foundation -framework AppKit -framework CoreGraphics -framework ApplicationServices \
 #     app/nvidia-card-control/nvidia-card-control/PointerNudgeLogic.swift \
 #     app/pointer-helper/main.swift \
 #     -o gpucontrol-pointerhelper
@@ -35,7 +35,7 @@ if ! command -v swiftc >/dev/null 2>&1; then
 fi
 
 swiftc -parse-as-library -O -target x86_64-apple-macosx15.0 \
-  -framework Foundation -framework CoreGraphics -framework ApplicationServices \
+  -framework Foundation -framework AppKit -framework CoreGraphics -framework ApplicationServices \
   "$LOGIC" \
   "$MAIN" \
   -o "$OUT"
