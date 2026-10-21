@@ -5,10 +5,11 @@
 // The old seed skip already passes the ordinary cases. The injected unlock-error retry fails on old.
 #include "nvmtl_surface_probe.h"
 
-static _Atomic int fail_unlock;
+static _Atomic int fail_unlock, omit_unlock_seed;
 static IOSurfaceRef fault_surface;
 static IOReturn probe_unlock(IOSurfaceRef s, uint32_t options, uint32_t *seed) {
-    IOReturn rc = IOSurfaceUnlock(s, options, seed);
+    BOOL omit = s == fault_surface && options == kIOSurfaceLockReadOnly && atomic_exchange(&omit_unlock_seed, 0);
+    IOReturn rc = IOSurfaceUnlock(s, options, omit ? NULL : seed);
     if (s == fault_surface && options == kIOSurfaceLockReadOnly && atomic_exchange(&fail_unlock, 0)) return kIOReturnError;
     return rc;
 }
@@ -48,6 +49,11 @@ int main(int argc, char **argv) { @autoreleasepool {
     check(!atomic_load(&fail_unlock), "read-only unlock fault reached import");
     fault_surface = NULL; n = submits(); surface_in(ta);
     check(submits() > n, "failed unlock retries import rather than caching uncertain state"); verify(d, q, ta, 72);
+    // Model a successful read-only unlock that leaves its seed out-parameter untouched.
+    fill_surface(a, 84); fault_surface = a; atomic_store(&omit_unlock_seed, 1); surface_in(ta);
+    check(!atomic_load(&omit_unlock_seed), "read-only unlock omitted seed once");
+    fault_surface = NULL; n = submits(); surface_in(ta);
+    check(submits() == n, "unwritten unlock seed preserves unchanged-surface skip"); verify(d, q, ta, 84);
     start = cpu_seconds();
     for (unsigned i = 0; i < frames; i++) { fill_surface(a, (unsigned char)i); surface_in(ta); }
     printf("modified CPU_us/frame=%.3f frames=%u\n", (cpu_seconds() - start) * 1e6 / frames, frames);

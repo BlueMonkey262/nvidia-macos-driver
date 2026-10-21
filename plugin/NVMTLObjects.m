@@ -1242,7 +1242,7 @@ static id nvmtl_surface_sync(NVMTLTexture *t) {
     size_t row = IOSurfaceGetBytesPerRowOfPlane(r->_surf, (uint32_t)r->_plane);
     int rc = (base && row) ? nvmtl_vk_image_write(r->_q, &r->_i, base, row) : -1;
     if (!rc && r->_i.bpp == 4) { char tag[24]; snprintf(tag, sizeof tag, "in%u-", (unsigned)IOSurfaceGetID(r->_surf)); nvmtl_frame_dump(tag, base, row, r->_i.w, r->_i.h); }
-    uint32_t endSeed = 0;
+    uint32_t endSeed = seed;
     IOReturn unlocked = IOSurfaceUnlock(r->_surf, kIOSurfaceLockReadOnly, &endSeed);
     if (rc || unlocked != kIOReturnSuccess) { nvlog("G13 surface-in: upload/unlock FAILED (%ux%u) — retried at the next use", r->_i.w, r->_i.h); return; }
     // A lock bounds CPU access; it is not a mutex against writers in other processes.
