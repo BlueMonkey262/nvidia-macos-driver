@@ -14,6 +14,13 @@ WindowServer and polling/backoff for other processes. An explicit
 suitable event is unavailable. The setting does not increase GPU clocks or its
 power limit, and WindowServer already takes the event path by default.
 
+Synchronous IOSurface uploads additionally request a thread-local blocking policy
+from NVK: they skip the initial spin interval and use a 50-microsecond timed sleep
+when event waits are disabled or unavailable. Enabled event waits use a bounded
+200-microsecond interval for these uploads. This requires rebuilding both the
+plugin and NVK; an older NVK retains the previous policy. CPU and latency effects
+of this scoped policy have not been VM-tested; the measurements below predate it.
+
 For a machine-local trial, back up `/Library/GPUBundles/nvmtl/nvrm610.conf`, then
 set exactly one `NVRM_EVENT_WAIT=1` entry while preserving its other settings.
 Reopen the application so it reads the new configuration. Restore the previous

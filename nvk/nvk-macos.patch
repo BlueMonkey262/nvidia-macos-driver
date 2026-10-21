@@ -7823,7 +7823,7 @@ diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --
 diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --exclude=__pycache__ --exclude=*.bak* --exclude=*.orig --exclude=.git --exclude=open-gpu-kernel-modules --strip-trailing-cr upmesa/mesa-17ca6174/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm.h rebase263/mesa/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm.h
 --- a/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm.h	1969-12-31 16:00:00
 +++ b/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm.h	2026-10-05 07:44:54
-@@ -0,0 +1,296 @@
+@@ -0,0 +1,298 @@
 +
 +
 +
@@ -8073,6 +8073,8 @@ diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --
 +                                 struct vk_object_base *log_obj);
 +void nvkmd_nvrm_wait_backoff(int64_t waited_ns);
 +void nvkmd_nvrm_wait_block(int64_t waited_ns, unsigned n, const uint32_t *slot, const uint32_t *gen, const uint64_t *want);
++unsigned nvkmd_nvrm_wait_sleep(unsigned enabled);
++void nvkmd_nvrm_wait_sleep_stats(uint64_t *out, unsigned n);
 +int64_t nvrm_xnu_wait_event(int fd, uint32_t seen, uint32_t timeout_us);
 +bool nvkmd_nvrm_defer(struct nvkmd_dev *dev, void (*fn)(void *), void *arg);
 +void nvkmd_nvrm_reap_deferred(void);
@@ -8123,7 +8125,7 @@ diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --
 diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --exclude=__pycache__ --exclude=*.bak* --exclude=*.orig --exclude=.git --exclude=open-gpu-kernel-modules --strip-trailing-cr upmesa/mesa-17ca6174/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm_ctx.c rebase263/mesa/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm_ctx.c
 --- a/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm_ctx.c	1969-12-31 16:00:00
 +++ b/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm_ctx.c	2026-10-05 15:58:51
-@@ -0,0 +1,1328 @@
+@@ -0,0 +1,1368 @@
 +
 +
 +
@@ -8301,6 +8303,38 @@ diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --
 +}
 +
 +
++// A synchronous surface upload opts in without changing waits on other threads.
++static __thread unsigned nvrm_wait_sleep;
++static uint64_t nvrm_wait_sleep_counts[3];
++
++__attribute__((visibility("default"))) unsigned
++nvkmd_nvrm_wait_sleep(unsigned enabled)
++{
++   const unsigned previous = nvrm_wait_sleep;
++   nvrm_wait_sleep = enabled != 0;
++   if (nvrm_wait_sleep && !previous)
++      __atomic_fetch_add(&nvrm_wait_sleep_counts[0], 1, __ATOMIC_RELAXED);
++   return previous;
++}
++
++__attribute__((visibility("default"))) void
++nvkmd_nvrm_wait_sleep_stats(uint64_t *out, unsigned n)
++{
++   for (unsigned i = 0; i < n; i++)
++      out[i] = i < 3 ? __atomic_load_n(&nvrm_wait_sleep_counts[i], __ATOMIC_RELAXED) : 0;
++}
++
++static void
++nvrm_wait_fallback(int64_t waited_ns)
++{
++   if (nvrm_wait_sleep) {
++      __atomic_fetch_add(&nvrm_wait_sleep_counts[1], 1, __ATOMIC_RELAXED);
++      usleep(50);
++   } else {
++      nvkmd_nvrm_wait_backoff(waited_ns);
++   }
++}
++
 +void
 +nvkmd_nvrm_wait_backoff(int64_t waited_ns)
 +{
@@ -8348,28 +8382,36 @@ diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --
 +      if (e && e[0]) on = e[0] != '0';
 +      else { const char *pn = getprogname(); on = pn && !strcmp(pn, "WindowServer"); }
 +   }
-+   if (on == 0 || waited_ns < 20000 || n == 0) {
-+      nvkmd_nvrm_wait_backoff(waited_ns);
++   if (on == 0 || (!nvrm_wait_sleep && waited_ns < 20000) || n == 0) {
++      nvrm_wait_fallback(waited_ns);
 +      return;
 +   }
 +   int fd;
 +   if (!nvrm_evwait_pending(n, slot, gen, want, &fd))
 +      return;
 +   if (fd < 0) {
-+      nvkmd_nvrm_wait_backoff(waited_ns);
++      nvrm_wait_fallback(waited_ns);
 +      return;
 +   }
 +   const int64_t seen = nvrm_xnu_wait_event(fd, 0, 0);
 +   if (seen < 0) {
 +      if (on) fprintf(stderr, "nvrm: event wait OFF (the kext has no selector 6) - polling\n");
 +      on = 0;
-+      nvkmd_nvrm_wait_backoff(waited_ns);
++      nvrm_wait_fallback(waited_ns);
 +      return;
 +   }
 +   { static int said; if (!said++ && nvkmd_nvrm_diag_on()) fprintf(stderr, "nvrm: event wait ON - waits sleep on graphics completion events (fd %d)\n", fd); }
 +   if (!nvrm_evwait_pending(n, slot, gen, want, &fd) || fd < 0)
 +      return;
-+   (void)nvrm_xnu_wait_event(fd, (uint32_t)seen, 2000);
++   if (nvrm_wait_sleep) __atomic_fetch_add(&nvrm_wait_sleep_counts[2], 1, __ATOMIC_RELAXED);
++   const int64_t woke = nvrm_xnu_wait_event(fd, (uint32_t)seen, nvrm_wait_sleep ? 200 : 2000);
++   if (nvrm_wait_sleep && woke < 0) {
++      on = 0;
++      nvrm_wait_fallback(waited_ns);
++   } else if (nvrm_wait_sleep && woke == seen) {
++      // Selector 6 may return without parking at its sleeper cap; do not spin there.
++      nvrm_wait_fallback(waited_ns);
++   }
 +}
 +
 +

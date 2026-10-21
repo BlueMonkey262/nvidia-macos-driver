@@ -472,6 +472,8 @@ typedef struct { uint32_t version, surfaceID, plane, pad; uint64_t size_B; } nvm
 static void (*pnvk_stage_import)(const nvmtl_vram_rec *);
 static uint32_t (*pnvk_surface_dirty)(VkDevice, uint32_t, uint32_t);
 static int (*pnvk_sparse)(void);
+static unsigned (*pnvk_wait_sleep)(unsigned);
+static void (*pnvk_wait_sleep_stats)(uint64_t *, unsigned);
 static int g_qsparse, g_sparse;
 static int g_extfd;
 
@@ -720,6 +722,9 @@ static int nvmtl_vk_initialize(void)
             pnvk_sample_depth_contract = (VkResult (*)(VkDevice, uint32_t *, uint32_t *))dlsym(g_lib, "nvmtl_nvk_sample_depth_contract_v1");
             pnvk_sample_depth_image = (VkResult (*)(VkDevice, VkImage, uint32_t *))dlsym(g_lib, "nvmtl_nvk_sample_depth_image_v1");
             pnvk_sparse = (int (*)(void))dlsym(g_lib, "nvmtl_nvk_sparse_bind_v1");
+            pnvk_wait_sleep = (unsigned (*)(unsigned))dlsym(g_lib, "nvkmd_nvrm_wait_sleep");
+            pnvk_wait_sleep_stats = (void (*)(uint64_t *, unsigned))dlsym(g_lib, "nvkmd_nvrm_wait_sleep_stats");
+            nvlog("vk: surface upload blocking waits %s", pnvk_wait_sleep ? "available" : "unavailable (older NVK)");
         }
         else { nvlog("vk: %s has no vkGetInstanceProcAddr", NVMTL_ICD_LIB); dlclose(g_lib); g_lib = NULL; }
     } else {
@@ -6241,6 +6246,14 @@ static void nvmtl_copy_from_surface(void *dst, const void *src, size_t n)
     memcpy(dst, src, n);
 }
 
+// Diagnostics: scope entries, timed sleeps, event waits; UINT64_MAX means an older NVK.
+void nvmtl_vk_surface_wait_stats(uint64_t *out, unsigned n)
+{
+    for (unsigned i = 0; i < n; i++) out[i] = 0;
+    if (pnvk_wait_sleep_stats && pnvk_wait_sleep) pnvk_wait_sleep_stats(out, n);
+    else if (n) out[0] = UINT64_MAX;
+}
+
 int nvmtl_vk_image_write(nvk_queue *q, nvk_image *img, const void *src, size_t row_bytes)
 {
     const size_t bpp = img->bpp ? img->bpp : 4;
@@ -6268,7 +6281,11 @@ int nvmtl_vk_image_write(nvk_queue *q, nvk_image *img, const void *src, size_t r
         VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, (VkImage)img->img, range };
     pvkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &toRead);
     img->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    // Scope the NVK policy to this thread and this synchronous upload, including submit-slot waits.
+    // NVK still checks the same completion semaphore, faults and deadlines; no resources retire early.
+    const unsigned previous = pnvk_wait_sleep ? pnvk_wait_sleep(1) : 0;
     const int rc = nvmtl_vk_submit_wait_at(c, "surface upload");
+    if (pnvk_wait_sleep) pnvk_wait_sleep(previous);
     if (sl->buf.size > NVMTL_UPSTAGE_KEEP) { nvmtl_vk_buffer_destroy(&sl->buf); memset(&sl->buf, 0, sizeof sl->buf); }
     return rc;
 }
