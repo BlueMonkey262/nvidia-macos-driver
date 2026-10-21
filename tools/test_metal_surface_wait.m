@@ -8,6 +8,7 @@
 #include <pthread.h>
 
 static __thread unsigned observe_events, event_fault, event_queries, event_retries, event_faults;
+static int (*wait_state)(void);
 static kern_return_t (*original_scalar)(mach_port_t, uint32_t, const uint64_t *, uint32_t, uint64_t *, uint32_t *);
 static kern_return_t probe_scalar(mach_port_t, uint32_t, const uint64_t *, uint32_t, uint64_t *, uint32_t *);
 static pthread_once_t scalar_once = PTHREAD_ONCE_INIT;
@@ -21,6 +22,7 @@ static kern_return_t probe_scalar(mach_port_t connection, uint32_t selector, con
                                   uint32_t inputCount, uint64_t *output, uint32_t *outputCount) {
     pthread_once(&scalar_once, resolve_scalar);
     if (observe_events && selector == 6 && input && inputCount == 2) {
+        if (wait_state) check(wait_state() == 1, "event wait observes active scoped policy");
         if (!input[1]) event_queries++;
         if (input[1] == 200) event_retries++;
         if ((event_fault == 1 && !input[1]) || (event_fault == 2 && input[1] == 200)) {
@@ -52,6 +54,9 @@ int main(int argc, char **argv) { @autoreleasepool {
     id<MTLDevice> d = device(); id<MTLCommandQueue> q = [d newCommandQueue];
     void (*wait_stats)(uint64_t *, unsigned) = dlsym(plugin, "nvmtl_vk_surface_wait_stats");
     check(wait_stats != NULL, "plugin exposes surface blocking policy counters (absent on old plugin)");
+    wait_state = dlsym(plugin, "nvmtl_vk_surface_wait_state");
+    check(wait_state != NULL, "plugin exposes current thread's wait policy");
+    if (wait_state) check(wait_state() == 0, "upload thread starts with ordinary wait policy");
     uint64_t before[3] = {0}, after[3] = {0};
     if (wait_stats) {
         wait_stats(NULL, 0); // zero-length diagnostic query
@@ -77,10 +82,14 @@ int main(int argc, char **argv) { @autoreleasepool {
         id<MTLTexture> t = (i & 1) ? tb : ta; IOSurfaceRef s = (i & 1) ? b : a;
         fill_surface(s, (unsigned char)i);
         observe_events = 1; surface_in(t); observe_events = 0;
-        if (!timing && i < 32) verify(d, q, t, (unsigned char)i);
+        if (!timing && i < 32) {
+            if (wait_state) check(wait_state() == 0, "each upload restores the calling thread's wait policy");
+            verify(d, q, t, (unsigned char)i);
+        }
     }
     printf("modified CPU_us/frame=%.3f frames=%u size=%lux%lu event=%s\n", (cpu_seconds() - start) * 1e6 / frames,
            frames, (unsigned long)w, (unsigned long)h, event ?: "default");
+    if (wait_state) check(wait_state() == 0, "wait policy restored after the upload loop");
     [work waitUntilCompleted]; check(work.status == MTLCommandBufferStatusCompleted, "busy GPU completed");
     if (fault) {
         check(!event_fault && event_faults == 1, "inject exactly one selector-6 error on the upload thread");
@@ -102,10 +111,13 @@ int main(int argc, char **argv) { @autoreleasepool {
     check(submits() == n, "unchanged surfaces do not wait or upload");
     external_write(argv[0], a, 41); surface_in(ta); verify(d, q, ta, 41);
     lifetime_cases(d, q);
-    // Ordinary readback submissions after the upload must not inherit the thread-local policy.
+    // Query actual TLS state; a 0-to-1 entry counter alone cannot expose a leaked scope.
+    if (wait_state) check(wait_state() == 0, "wait policy restored after external edits and pending destruction");
+    // Ordinary readback submissions should not create another upload scope.
     if (wait_stats) {
         wait_stats(before, 3); verify(d, q, ta, 41); wait_stats(after, 3);
-        check(before[0] == after[0], "surface wait scope restored after upload");
+        check(before[0] == after[0], "readback does not open another surface upload scope");
+        if (wait_state) check(wait_state() == 0, "ordinary readback retains restored wait policy");
     }
     surface_in(nil); ta = nil; tb = nil; CFRelease(a); CFRelease(b);
     printf("%s surface blocking wait\n", failures ? "FAIL" : "PASS"); return failures ? 1 : 0;

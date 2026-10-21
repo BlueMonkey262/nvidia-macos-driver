@@ -4,14 +4,27 @@
 // Exit 0 pass, 1 fail, 77 skip. Compare identical --timing runs on old/new plugins.
 // The old seed skip already passes the ordinary cases. The injected unlock-error retry fails on old.
 #include "nvmtl_surface_probe.h"
+#include <pthread.h>
 
 static _Atomic int fail_unlock, omit_unlock_seed;
 static IOSurfaceRef fault_surface;
+static IOReturn (*original_unlock)(IOSurfaceRef, uint32_t, uint32_t *);
+static IOReturn probe_unlock(IOSurfaceRef, uint32_t, uint32_t *);
+static pthread_once_t unlock_once = PTHREAD_ONCE_INIT;
+static __thread int in_unlock;
+static void resolve_unlock(void) {
+    original_unlock = dlsym(RTLD_NEXT, "IOSurfaceUnlock");
+    if (!original_unlock || original_unlock == probe_unlock) {
+        fprintf(stderr, "FAIL resolve original IOSurfaceUnlock\n"); exit(1);
+    }
+}
 static IOReturn probe_unlock(IOSurfaceRef s, uint32_t options, uint32_t *seed) {
+    if (in_unlock) { fprintf(stderr, "FAIL recursive IOSurfaceUnlock interposition\n"); exit(1); }
+    in_unlock = 1; pthread_once(&unlock_once, resolve_unlock);
     BOOL omit = s == fault_surface && options == kIOSurfaceLockReadOnly && atomic_exchange(&omit_unlock_seed, 0);
-    IOReturn rc = IOSurfaceUnlock(s, options, omit ? NULL : seed);
-    if (s == fault_surface && options == kIOSurfaceLockReadOnly && atomic_exchange(&fail_unlock, 0)) return kIOReturnError;
-    return rc;
+    IOReturn rc = original_unlock(s, options, omit ? NULL : seed);
+    if (s == fault_surface && options == kIOSurfaceLockReadOnly && atomic_exchange(&fail_unlock, 0)) rc = kIOReturnError;
+    in_unlock = 0; return rc;
 }
 __attribute__((used)) static const struct { const void *replacement, *original; } interpose_unlock
     __attribute__((section("__DATA,__interpose"))) = {(const void *)probe_unlock, (const void *)IOSurfaceUnlock};

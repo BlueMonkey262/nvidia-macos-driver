@@ -7823,7 +7823,7 @@ diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --
 diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --exclude=__pycache__ --exclude=*.bak* --exclude=*.orig --exclude=.git --exclude=open-gpu-kernel-modules --strip-trailing-cr upmesa/mesa-17ca6174/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm.h rebase263/mesa/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm.h
 --- a/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm.h	1969-12-31 16:00:00
 +++ b/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm.h	2026-10-05 07:44:54
-@@ -0,0 +1,298 @@
+@@ -0,0 +1,299 @@
 +
 +
 +
@@ -8074,6 +8074,7 @@ diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --
 +void nvkmd_nvrm_wait_backoff(int64_t waited_ns);
 +void nvkmd_nvrm_wait_block(int64_t waited_ns, unsigned n, const uint32_t *slot, const uint32_t *gen, const uint64_t *want);
 +unsigned nvkmd_nvrm_wait_sleep(unsigned enabled);
++unsigned nvkmd_nvrm_wait_sleep_state(void);
 +void nvkmd_nvrm_wait_sleep_stats(uint64_t *out, unsigned n);
 +int64_t nvrm_xnu_wait_event(int fd, uint32_t seen, uint32_t timeout_us);
 +bool nvkmd_nvrm_defer(struct nvkmd_dev *dev, void (*fn)(void *), void *arg);
@@ -8125,7 +8126,7 @@ diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --
 diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --exclude=__pycache__ --exclude=*.bak* --exclude=*.orig --exclude=.git --exclude=open-gpu-kernel-modules --strip-trailing-cr upmesa/mesa-17ca6174/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm_ctx.c rebase263/mesa/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm_ctx.c
 --- a/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm_ctx.c	1969-12-31 16:00:00
 +++ b/src/nouveau/vulkan/nvkmd/nvrm/nvkmd_nvrm_ctx.c	2026-10-05 15:58:51
-@@ -0,0 +1,1367 @@
+@@ -0,0 +1,1373 @@
 +
 +
 +
@@ -8315,6 +8316,12 @@ diff -ruN --exclude=subprojects --exclude=ci --exclude=build* --exclude=*.pyc --
 +   if (nvrm_wait_sleep && !previous)
 +      __atomic_fetch_add(&nvrm_wait_sleep_counts[0], 1, __ATOMIC_RELAXED);
 +   return previous;
++}
++
++__attribute__((visibility("default"))) unsigned
++nvkmd_nvrm_wait_sleep_state(void)
++{
++   return nvrm_wait_sleep;
 +}
 +
 +__attribute__((visibility("default"))) void

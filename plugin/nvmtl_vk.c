@@ -473,6 +473,7 @@ static void (*pnvk_stage_import)(const nvmtl_vram_rec *);
 static uint32_t (*pnvk_surface_dirty)(VkDevice, uint32_t, uint32_t);
 static int (*pnvk_sparse)(void);
 static unsigned (*pnvk_wait_sleep)(unsigned);
+static unsigned (*pnvk_wait_sleep_state)(void);
 static void (*pnvk_wait_sleep_stats)(uint64_t *, unsigned);
 static int g_qsparse, g_sparse;
 static int g_extfd;
@@ -723,6 +724,7 @@ static int nvmtl_vk_initialize(void)
             pnvk_sample_depth_image = (VkResult (*)(VkDevice, VkImage, uint32_t *))dlsym(g_lib, "nvmtl_nvk_sample_depth_image_v1");
             pnvk_sparse = (int (*)(void))dlsym(g_lib, "nvmtl_nvk_sparse_bind_v1");
             pnvk_wait_sleep = (unsigned (*)(unsigned))dlsym(g_lib, "nvkmd_nvrm_wait_sleep");
+            pnvk_wait_sleep_state = (unsigned (*)(void))dlsym(g_lib, "nvkmd_nvrm_wait_sleep_state");
             pnvk_wait_sleep_stats = (void (*)(uint64_t *, unsigned))dlsym(g_lib, "nvkmd_nvrm_wait_sleep_stats");
             nvlog("vk: surface upload blocking waits %s", pnvk_wait_sleep ? "available" : "unavailable (older NVK)");
         }
@@ -6244,6 +6246,12 @@ static void nvmtl_copy_from_surface(void *dst, const void *src, size_t n)
     }
 #endif
     memcpy(dst, src, n);
+}
+
+// Query this thread without changing its policy or counting another scope entry.
+int nvmtl_vk_surface_wait_state(void)
+{
+    return pnvk_wait_sleep_state ? (int)pnvk_wait_sleep_state() : -1;
 }
 
 // Diagnostics: scope entries, timed sleeps, event waits; UINT64_MAX means an older NVK.
