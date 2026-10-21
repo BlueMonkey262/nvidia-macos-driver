@@ -1,6 +1,7 @@
 // Telemetry transport/schema smoke test; no Metal methods are changed by this feature.
 // Build: clang -fobjc-arc -Wall -Wextra -framework Foundation tools/test_metal_telemetry.m -o .scratch/test_metal_telemetry
 // Run from repo root after building tools/gpu_telemetry: .scratch/test_metal_telemetry
+// When the card is up, also runs tools/gpu_telemetry --poll and prints clock/fan/power/util on stderr.
 // Exit: 0 pass, 1 fail, 77 skip (RM/device not available, after checking error JSON).
 // Copyright (c) 2026 BlueMonkey
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
@@ -16,7 +17,7 @@ static void expect(BOOL ok, NSString *what)
     if (!ok) { fprintf(stderr, "FAIL %s\n", what.UTF8String); failures++; }
 }
 
-static NSDictionary *run(NSString *path, NSArray<NSString *> *args, int expectedStatus)
+static NSDictionary *run(NSString *path, NSArray<NSString *> *args, int expectedStatus, NSTimeInterval limit)
 {
     char filename[] = ".scratch/telemetry-test.XXXXXX";
     int fd = mkstemp(filename);
@@ -30,11 +31,11 @@ static NSDictionary *run(NSString *path, NSArray<NSString *> *args, int expected
     task.standardError = [NSFileHandle fileHandleWithNullDevice];
     NSError *error = nil;
     if (![task launchAndReturnError:&error]) { expect(NO, error.localizedDescription); return nil; }
-    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:20];
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:limit];
     while (task.running && deadline.timeIntervalSinceNow > 0) [NSThread sleepForTimeInterval:0.05];
     if (task.running) {
         kill(task.processIdentifier, SIGKILL);
-        expect(NO, @"probe/CLI exceeded 20 seconds");
+        expect(NO, @"probe/CLI exceeded its deadline");
         return nil;
     }
     [task waitUntilExit];
@@ -77,7 +78,26 @@ static BOOL validate(NSDictionary *sample)
         if ([total isKindOfClass:NSNumber.class] && [used isKindOfClass:NSNumber.class] && [free isKindOfClass:NSNumber.class])
             expect([used unsignedLongLongValue] + [free unsignedLongLongValue] == [total unsignedLongLongValue], @"memory accounting");
     }
+    if ([sample[@"setup"] isEqual:@"ok"]) {
+        id rusd = sample[@"rusd"];
+        if ([rusd isKindOfClass:NSDictionary.class] && [rusd[@"error"] isEqual:@46])
+            expect(NO, [NSString stringWithFormat:@"rusd still INVALID_LIMIT 46 call=%@", rusd[@"call"] ?: @"missing"]);
+    }
     return [sample[@"setup"] isEqual:@"ok"];
+}
+
+// Prints whether --poll produced numbers. A remaining error is a result, not a schema failure,
+// unless it is still RM INVALID_LIMIT 46 (the map-length bug).
+static void printDecode(NSString *label, NSDictionary *sample)
+{
+    fprintf(stderr, "%s setup=%s\n", label.UTF8String, [sample[@"setup"] description].UTF8String);
+    for (NSString *key in @[@"rusd", @"rusd_poll", @"clock_graphics_mhz", @"clock_memory_mhz", @"clock_video_mhz",
+            @"fan_rpm_slots", @"power_draw_w", @"power_average_w", @"power_limit_w",
+            @"gpu_utilization_percent", @"memory_utilization_percent"]) {
+        id value = sample[key];
+        const char *shown = value ? [value description].UTF8String : "missing";
+        fprintf(stderr, "  %s: %s\n", key.UTF8String, shown);
+    }
 }
 
 int main(void)
@@ -91,11 +111,17 @@ int main(void)
         NSString *probe = [root stringByAppendingPathComponent:@"tools/gpu_telemetry"];
         NSString *cli = [root stringByAppendingPathComponent:@"tools/nvmtlctl"];
         BOOL available = NO;
-        for (int i = 0; i < 3; i++) available |= validate(run(probe, @[], 0));
-        validate(run(cli, @[@"telemetry", @"--json"], 0));
-        validate(run(cli, @[@"--json", @"telemetry"], 0));
-        run(cli, @[@"telemetry"], 2);
-        run(cli, @[@"telemetry", @"--json", @"unexpected"], 2);
+        for (int i = 0; i < 3; i++) available |= validate(run(probe, @[], 0, 20));
+        validate(run(cli, @[@"telemetry", @"--json"], 0, 20));
+        validate(run(cli, @[@"--json", @"telemetry"], 0, 20));
+        run(cli, @[@"telemetry"], 2, 20);
+        run(cli, @[@"telemetry", @"--json", @"unexpected"], 2, 20);
+        if (available) {
+            NSDictionary *polled = run(probe, @[@"--poll"], 0, 25);
+            validate(polled);
+            if (polled) printDecode(@"POLL", polled);
+            else fprintf(stderr, "POLL: no JSON\n");
+        }
         if (failures) return 1;
         puts(available ? "PASS telemetry schema, repeated calls, cleanup, CLI argument handling" : "SKIP card unavailable; error JSON and CLI checks passed");
         return available ? 0 : 77;
