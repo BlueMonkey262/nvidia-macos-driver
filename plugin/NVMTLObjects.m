@@ -1226,7 +1226,10 @@ static id nvmtl_surface_sync(NVMTLTexture *t) {
     if (!r->_surf) return;
     @synchronized (nvmtl_surface_sync(r)) {
     const uint32_t vgen = r->_vramOn ? 0 : nvmtl_vram_gen(r->_surf, r->_plane);
+    // IOSurfaceGetSeed tracks modifications across processes, including CPU write unlocks.
+    // Keep the generation check: a private image can lag another wrapper's GPU publication.
     if (r->_surfSynced && IOSurfaceGetSeed(r->_surf) == r->_surfSeed && (r->_vramOn || vgen == r->_surfGen)) return;
+    r->_surfSynced = NO;
     if (![r nvmtlSurfaceCopyable]) return;
     { uint32_t now = IOSurfaceGetSeed(r->_surf);
       if (r->_vramOn && nvmtl_vram_tag_current(r->_surf, r->_plane, now)) {
@@ -1239,8 +1242,12 @@ static id nvmtl_surface_sync(NVMTLTexture *t) {
     size_t row = IOSurfaceGetBytesPerRowOfPlane(r->_surf, (uint32_t)r->_plane);
     int rc = (base && row) ? nvmtl_vk_image_write(r->_q, &r->_i, base, row) : -1;
     if (!rc && r->_i.bpp == 4) { char tag[24]; snprintf(tag, sizeof tag, "in%u-", (unsigned)IOSurfaceGetID(r->_surf)); nvmtl_frame_dump(tag, base, row, r->_i.w, r->_i.h); }
-    IOSurfaceUnlock(r->_surf, kIOSurfaceLockReadOnly, NULL);
-    if (rc) { nvlog("G13 surface-in: upload FAILED (%ux%u) — retried at the next use", r->_i.w, r->_i.h); return; }
+    uint32_t endSeed = 0;
+    IOReturn unlocked = IOSurfaceUnlock(r->_surf, kIOSurfaceLockReadOnly, &endSeed);
+    if (rc || unlocked != kIOReturnSuccess) { nvlog("G13 surface-in: upload/unlock FAILED (%ux%u) — retried at the next use", r->_i.w, r->_i.h); return; }
+    // A lock bounds CPU access; it is not a mutex against writers in other processes.
+    // Never cache a copy whose source changed while it was being uploaded.
+    if (endSeed != seed || IOSurfaceGetSeed(r->_surf) != seed) return;
     r->_surfSeed = seed; r->_surfSynced = YES; r->_surfGen = vgen;
     g_surfin_copy++; if (r->_vramOn) nvmtl_vram_tag_set(r->_surf, r->_plane, seed);
     static unsigned n; if (n++ < 6 || n % 2000 == 0) nvlog("G13 surface-in #%u: %ux%u surface %p seed %u uploaded", n, r->_i.w, r->_i.h, (void *)r->_surf, seed);
