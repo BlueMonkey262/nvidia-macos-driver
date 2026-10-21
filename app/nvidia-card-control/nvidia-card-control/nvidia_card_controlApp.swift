@@ -46,6 +46,11 @@ struct nvidia_card_controlApp: App {
             }
         }
 
+        WindowGroup("Test Pattern (GPU Control)", id: StreamPatternWindow.id) {
+            StreamPatternView()
+        }
+        .defaultSize(width: 1280, height: 720)
+
         Settings {
             Form {
                 Section {

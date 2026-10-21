@@ -13,3 +13,7 @@ nvidia-card-control/nvidia-card-control/gpucontrol-sunshine-tool
 # Built helper Mach-O (produce with app/scripts/build-pointer-helper.sh on macOS)
 pointer-helper/gpucontrol-pointerhelper
 nvidia-card-control/nvidia-card-control/gpucontrol-pointerhelper
+# Test executables built by scripts/build-tests.sh (keep catalog/docs tracked).
+/nvidia-card-control/nvidia-card-control/Tests/*
+!/nvidia-card-control/nvidia-card-control/Tests/manifest.tsv
+!/nvidia-card-control/nvidia-card-control/Tests/README.md

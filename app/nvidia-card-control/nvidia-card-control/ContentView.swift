@@ -5,6 +5,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var store: DriverStore
+    @State private var testsStore = TestsStore()
     @State private var selection: SidebarCategory? = .status
 
     var body: some View {
@@ -55,6 +56,8 @@ struct ContentView: View {
             SunshineView(store: store)
         case .performance:
             PerformanceView(store: store)
+        case .tests:
+            TestsView(driverStore: store, testsStore: testsStore)
         case .logs:
             LogsView(store: store)
         case .about:
